@@ -586,17 +586,25 @@ export async function PATCH(request: Request) {
           ),
         );
 
-        let shiftedByMinutes = currentQuest.shifted_by_minutes || 0;
-        if (currentQuest.planned_end) {
+        // shifted_by_minutes = actual_minutes - estimated_minutes (min 0)
+        let estimatedMinutes = currentQuest.estimated_minutes || 0;
+        // Fallback: if estimated_minutes is not set but we have planned_start/end, derive it
+        if (
+          !estimatedMinutes &&
+          currentQuest.planned_start &&
+          currentQuest.planned_end
+        ) {
+          const plannedStart = new Date(currentQuest.planned_start);
           const plannedEnd = new Date(currentQuest.planned_end);
-          const diffMinutes = Math.max(
+          estimatedMinutes = Math.max(
             0,
             Math.round(
-              (actualEnd.getTime() - plannedEnd.getTime()) / (1000 * 60),
+              (plannedEnd.getTime() - plannedStart.getTime()) / (1000 * 60),
             ),
           );
-          shiftedByMinutes = diffMinutes;
         }
+
+        const shiftedByMinutes = Math.max(0, actualMinutes - estimatedMinutes);
 
         await supabase
           .from('quests')
