@@ -46,6 +46,7 @@ interface Quest {
 }
 
 const initialQuests: Quest[] = [];
+const PAGE_SIZE = 30;
 
 const getRankColor = (rank: string) => {
   const colors: Record<string, string> = {
@@ -91,6 +92,7 @@ export default function QuestsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCategorySubmitting, setIsCategorySubmitting] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [categoryFormData, setCategoryFormData] = useState({
     name: '',
     color: '#3b82f6',
@@ -125,8 +127,28 @@ export default function QuestsPage() {
     return matchesSearch && matchesCategory;
   });
 
+  // Order: pending / in-progress / delayed (and others) first, completed at the bottom.
+  const statusWeight: Record<Quest['status'], number> = {
+    'pending': 0,
+    'in-progress': 0,
+    'delayed': 0,
+    'cancelled': 1,
+    'completed': 2,
+  };
+
+  const sortedQuests = [...filteredQuests].sort((a, b) => {
+    const wa = statusWeight[a.status] ?? 0;
+    const wb = statusWeight[b.status] ?? 0;
+    if (wa !== wb) return wa - wb;
+    // Within the same bucket, order by date then planned_start
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    const sa = a.planned_start || '';
+    const sb = b.planned_start || '';
+    return sa.localeCompare(sb);
+  });
+
   const filterByStatus = (status: string) =>
-    filteredQuests.filter(q => status === 'all' ? true : q.status === status);
+    sortedQuests.filter(q => (status === 'all' ? true : q.status === status));
 
   // Fetch categories from database
   useEffect(() => {
@@ -539,29 +561,37 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
 
             {/* Status Tabs */}
             <Tabs defaultValue="all" className="w-full">
-              <TabsList className="grid w-full max-w-2xl grid-cols-6 bg-card/50 border border-border">
+              <TabsList className="grid w-full max-w-2xl grid-cols-5 bg-card/50 border border-border">
                 <TabsTrigger value="all">All ({filteredQuests.length})</TabsTrigger>
                 <TabsTrigger value="pending">Pending ({filterByStatus('pending').length})</TabsTrigger>
                 <TabsTrigger value="in-progress">Active ({filterByStatus('in-progress').length})</TabsTrigger>
                 <TabsTrigger value="completed">Done ({filterByStatus('completed').length})</TabsTrigger>
                 <TabsTrigger value="delayed">Delayed ({filterByStatus('delayed').length})</TabsTrigger>
-                <TabsTrigger value="cancelled">Cancelled ({filterByStatus('cancelled').length})</TabsTrigger>
               </TabsList>
 
-              {['all', 'pending', 'in-progress', 'completed', 'delayed', 'cancelled'].map(tab => (
-                <TabsContent key={tab} value={tab} className="space-y-4 mt-6">
-                  {filterByStatus(tab).length === 0 ? (
-                    <Card className="border-border bg-card/50 p-8 text-center">
-                      <p className="text-muted-foreground">No quests found</p>
-                    </Card>
-                  ) : (
-                    filterByStatus(tab).map(quest => (
-                      <Card
-                        key={quest.id}
-                        onClick={() => handleQuestClick(quest)}
-                        className={`border-border bg-card/50 backdrop-blur card-glow p-6 hover:border-primary/50 cursor-pointer transition-all ${quest.status === 'completed' ? 'opacity-75' : ''
-                          }`}
-                      >
+              {['all', 'pending', 'in-progress', 'completed', 'delayed'].map(tab => {
+                const allForTab = filterByStatus(tab);
+                const totalForTab = allForTab.length;
+                const totalPages = Math.max(1, Math.ceil(totalForTab / PAGE_SIZE));
+                const effectivePage = Math.min(currentPage, totalPages);
+                const startIndex = (effectivePage - 1) * PAGE_SIZE;
+                const pageItems = allForTab.slice(startIndex, startIndex + PAGE_SIZE);
+
+                return (
+                  <TabsContent key={tab} value={tab} className="space-y-4 mt-6">
+                    {totalForTab === 0 ? (
+                      <Card className="border-border bg-card/50 p-8 text-center">
+                        <p className="text-muted-foreground">No quests found</p>
+                      </Card>
+                    ) : (
+                      <>
+                        {pageItems.map(quest => (
+                          <Card
+                            key={quest.id}
+                            onClick={() => handleQuestClick(quest)}
+                            className={`border-border bg-card/50 backdrop-blur card-glow p-6 hover:border-primary/50 cursor-pointer transition-all ${quest.status === 'completed' ? 'opacity-75' : ''
+                              }`}
+                          >
                         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                           {/* Main Info */}
                           <div className="flex-1">
@@ -734,11 +764,45 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                             </div>
                           </div>
                         </div>
-                      </Card>
-                    ))
-                  )}
-                </TabsContent>
-              ))}
+                          </Card>
+                        ))}
+
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground">
+                            <button
+                              type="button"
+                              disabled={effectivePage === 1}
+                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                              className={`px-3 py-1 rounded border ${
+                                effectivePage === 1
+                                  ? 'opacity-50 cursor-not-allowed border-border'
+                                  : 'border-border hover:border-primary'
+                              }`}
+                            >
+                              Previous
+                            </button>
+                            <span>
+                              Page {effectivePage} of {totalPages}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={effectivePage === totalPages}
+                              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                              className={`px-3 py-1 rounded border ${
+                                effectivePage === totalPages
+                                  ? 'opacity-50 cursor-not-allowed border-border'
+                                  : 'border-border hover:border-primary'
+                              }`}
+                            >
+                              Next
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </TabsContent>
+                );
+              })}
             </Tabs>
           </div>
         </main>
@@ -1502,7 +1566,14 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Category</p>
-                    <p className="font-semibold">{selectedQuest.category ?? '—'}</p>
+                    <p className="font-semibold">
+                      {(() => {
+                        const questCategory = categories.find(
+                          (cat) => String(cat.id) === String(selectedQuest.category),
+                        );
+                        return questCategory ? questCategory.name : '—';
+                      })()}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Rank</p>
