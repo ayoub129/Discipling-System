@@ -59,6 +59,13 @@ export default function SystemPanel() {
   const [activePenalties, setActivePenalties] = useState<PenaltyItem[]>([]);
   const [dataLoading, setDataLoading] = useState(true);
 
+  const toLocalDateKey = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
   useEffect(() => {
     const checkAuth = async () => {
       const supabase = createClient();
@@ -86,7 +93,7 @@ export default function SystemPanel() {
         ]);
 
         if (cancelled) return;
-        const today = new Date().toISOString().split('T')[0];
+        const today = toLocalDateKey(new Date());
 
         let profileData: DashboardProfile | null = null;
         if (profileRes.ok) {

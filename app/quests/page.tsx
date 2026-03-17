@@ -102,7 +102,13 @@ export default function QuestsPage() {
     title: '',
     description: '',
     category: '',
-    date: new Date().toISOString().split('T')[0],
+    date: (() => {
+      const d = new Date();
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    })(),
     startTime: '09:00',
     endTime: '10:00',
     rank: '',
@@ -114,6 +120,12 @@ export default function QuestsPage() {
     recurring: false,
     recurringPattern: 'daily',
   });
+
+  // Parse timestamps consistently (Supabase may return without timezone)
+  const parseTs = (ts: string) => {
+    const hasTz = /[zZ]|[+-]\d{2}:\d{2}$/.test(ts);
+    return new Date(hasTz ? ts : `${ts}Z`);
+  };
 
   const filteredQuests = quests.filter(q => {
     const matchesSearch =
@@ -378,8 +390,8 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
       description: quest.description || '',
       category: quest.category || '',
       date: quest.date,
-      startTime: quest.planned_start ? new Date(quest.planned_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00',
-      endTime: quest.planned_end ? new Date(quest.planned_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '10:00',
+      startTime: quest.planned_start ? parseTs(quest.planned_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00',
+      endTime: quest.planned_end ? parseTs(quest.planned_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '10:00',
       penalty: quest.penalties_points,
       rank: quest.rank_id || '',
       xp: quest.xp_reward,
@@ -640,8 +652,8 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                                 <div>
                                   <span className="text-muted-foreground block text-xs mb-1">Time</span>
                                   <p className="font-semibold">
-                                    {new Date(quest.planned_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -
-                                    {new Date(quest.planned_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {parseTs(quest.planned_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -
+                                    {parseTs(quest.planned_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                   </p>
                                 </div>
                               )}
@@ -672,7 +684,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                                 const isDelayed =
                                   quest.planned_end &&
                                   quest.status !== 'completed' &&
-                                  new Date(quest.planned_end) < now;
+                                  parseTs(quest.planned_end) < now;
                                 const baseBadge =
                                   quest.status === 'completed'
                                     ? 'bg-accent/20 text-accent'
@@ -1587,7 +1599,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                     <p className="text-xs text-muted-foreground mb-1">Time</p>
                     <p className="font-semibold">
                       {selectedQuest.planned_start && selectedQuest.planned_end
-                        ? `${new Date(selectedQuest.planned_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(selectedQuest.planned_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        ? `${parseTs(selectedQuest.planned_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${parseTs(selectedQuest.planned_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
                         : '—'}
                     </p>
                   </div>
@@ -1652,7 +1664,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Actual Timing</p>
                     <p className="font-semibold text-accent">
-                      {new Date(selectedQuest.actual_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(selectedQuest.actual_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {parseTs(selectedQuest.actual_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {parseTs(selectedQuest.actual_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 ) : selectedQuest.actualTiming ? (

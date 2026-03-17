@@ -31,6 +31,20 @@ export default function CalendarPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [streakDays, setStreakDays] = useState<number | null>(null);
 
+  // Use local date keys (YYYY-MM-DD) to avoid UTC/DST day shifts
+  const toLocalDateKey = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  // Supabase may return timestamps without timezone; treat them as UTC for stable rendering
+  const parseTs = (ts: string) => {
+    const hasTz = /[zZ]|[+-]\d{2}:\d{2}$/.test(ts);
+    return new Date(hasTz ? ts : `${ts}Z`);
+  };
+
   const getDaysInMonth = (date: Date) => {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
   };
@@ -130,10 +144,10 @@ export default function CalendarPage() {
 
   const formatDateKey = (date: Date, day: number) => {
     const d = new Date(date.getFullYear(), date.getMonth(), day);
-    return d.toISOString().split('T')[0]; // YYYY-MM-DD
+    return toLocalDateKey(d); // YYYY-MM-DD (local)
   };
 
-  const selectedDateKey = selectedDate.toISOString().split('T')[0];
+  const selectedDateKey = toLocalDateKey(selectedDate);
   const selectedDayQuests = questsByDate[selectedDateKey] || [];
   const selectedCompleted = selectedDayQuests.filter(
     q => q.status === 'completed',
@@ -158,7 +172,7 @@ export default function CalendarPage() {
   const isQuestDelayed = (quest: Quest) => {
     if (!quest.planned_end) return false;
     if (quest.status === 'completed') return false;
-    const end = new Date(quest.planned_end);
+    const end = parseTs(quest.planned_end);
     return end.getTime() < Date.now();
   };
 
