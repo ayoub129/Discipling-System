@@ -1,6 +1,33 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
+const toUtcIsoFromLocal = (
+  date: string,
+  time: string,
+  timezoneOffsetMinutes: number,
+) => {
+  const [year, month, day] = date.split('-').map(Number);
+  const [hour, minute] = time.split(':').map(Number);
+
+  if (
+    !Number.isFinite(year) ||
+    !Number.isFinite(month) ||
+    !Number.isFinite(day) ||
+    !Number.isFinite(hour) ||
+    !Number.isFinite(minute)
+  ) {
+    throw new Error('Invalid date/time format');
+  }
+
+  // timezoneOffsetMinutes follows Date#getTimezoneOffset:
+  // UTC = local time + offset minutes.
+  const utcMs =
+    Date.UTC(year, month - 1, day, hour, minute, 0, 0) +
+    timezoneOffsetMinutes * 60_000;
+
+  return new Date(utcMs).toISOString();
+};
+
 export async function POST(request: Request) {
   try {
     console.log('[v0] POST /api/quests called');
@@ -32,6 +59,7 @@ export async function POST(request: Request) {
       fixed,
       recurring,
       recurringPattern,
+      timezoneOffsetMinutes,
     } = body;
 
     if (!title || !date) {
@@ -41,9 +69,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Create datetime objects for planned start and end
-    const plannedStart = new Date(`${date}T${startTime}:00`).toISOString();
-    const plannedEnd = new Date(`${date}T${endTime}:00`).toISOString();
+    // Convert local date/time from client to UTC deterministically,
+    // so server timezone never shifts quest times.
+    const offsetMinutes =
+      typeof timezoneOffsetMinutes === 'number' ? timezoneOffsetMinutes : 0;
+    const plannedStart = toUtcIsoFromLocal(date, startTime, offsetMinutes);
+    const plannedEnd = toUtcIsoFromLocal(date, endTime, offsetMinutes);
 
     const estimatedMinutes = Math.round(
       (new Date(plannedEnd).getTime() - new Date(plannedStart).getTime()) /
@@ -194,6 +225,7 @@ export async function PATCH(request: Request) {
       fixed,
       recurring,
       recurringPattern,
+      timezoneOffsetMinutes,
     } = body as {
       id?: string;
       status?: 'pending' | 'in-progress' | 'completed' | 'delayed' | 'cancelled';
@@ -211,6 +243,7 @@ export async function PATCH(request: Request) {
       fixed?: boolean;
       recurring?: boolean;
       recurringPattern?: string;
+      timezoneOffsetMinutes?: number;
     };
 
     if (!id) {
@@ -267,8 +300,10 @@ export async function PATCH(request: Request) {
       updates.date = date;
     }
     if (date && startTime && endTime) {
-      const plannedStart = new Date(`${date}T${startTime}:00`).toISOString();
-      const plannedEnd = new Date(`${date}T${endTime}:00`).toISOString();
+      const offsetMinutes =
+        typeof timezoneOffsetMinutes === 'number' ? timezoneOffsetMinutes : 0;
+      const plannedStart = toUtcIsoFromLocal(date, startTime, offsetMinutes);
+      const plannedEnd = toUtcIsoFromLocal(date, endTime, offsetMinutes);
       updates.planned_start = plannedStart;
       updates.planned_end = plannedEnd;
       updates.estimated_minutes = Math.round(
@@ -315,6 +350,56 @@ export async function PATCH(request: Request) {
         { error: error.message || 'Failed to update quest' },
         { status: 500 },
       );
+    }
+
+    // "Not Done" (cancelled) behavior:
+    // - Add only quest.penalties_points to user_stats.total_penalties_points
+    // - Reset delayed minus points (current_minus_points) to 0
+    if (status === 'cancelled' && currentQuest.status !== 'cancelled') {
+      try {
+        const penaltyPointsToAdd = currentQuest.penalties_points || 0;
+
+        await supabase
+          .from('quests')
+          .update({
+            current_minus_points: 0,
+            updated_at: nowIso,
+          })
+          .eq('id', currentQuest.id)
+          .eq('user_id', user.id);
+
+        if (penaltyPointsToAdd > 0) {
+          const { data: penaltyStats } = await supabase
+            .from('user_stats')
+            .select('id, total_penalties_points')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+          if (!penaltyStats) {
+            await supabase.from('user_stats').insert({
+              user_id: user.id,
+              current_level: 1,
+              current_xp: 0,
+              total_xp_earned: 0,
+              xp_to_next_level: 100,
+              reward_points_balance: 0,
+              total_penalties_points: penaltyPointsToAdd,
+              current_rank_id: null,
+            });
+          } else {
+            const currentTotal = penaltyStats.total_penalties_points ?? 0;
+            await supabase
+              .from('user_stats')
+              .update({
+                total_penalties_points: currentTotal + penaltyPointsToAdd,
+                updated_at: nowIso,
+              })
+              .eq('user_id', user.id);
+          }
+        }
+      } catch (cancelPenaltyError) {
+        console.error('[v0] Error applying not-done penalty points:', cancelPenaltyError);
+      }
     }
 
     // Track minus points delta

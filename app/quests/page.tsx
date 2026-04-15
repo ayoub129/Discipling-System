@@ -353,6 +353,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           minusPoints: quest.max_minus_points ?? 0,
           fixed: quest.is_fixed,
           recurring: quest.is_recurring,
+          timezoneOffsetMinutes: new Date().getTimezoneOffset(),
           recurringPattern: quest.recurrence_rule?.includes('WEEKLY')
             ? 'weekly'
             : quest.recurrence_rule?.includes('MONTHLY')
@@ -409,6 +410,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           minusPoints: formData.minusPoints,
           fixed: formData.fixed,
           recurring: formData.recurring,
+          timezoneOffsetMinutes: new Date().getTimezoneOffset(),
           recurringPattern: formData.recurringPattern,
         }),
       });
@@ -542,6 +544,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           rank: formData.rank,
           fixed: formData.fixed,
           recurring: formData.recurring,
+          timezoneOffsetMinutes: new Date().getTimezoneOffset(),
           recurringPattern: formData.recurringPattern,
         }),
       });
@@ -807,7 +810,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      className="hover:bg-muted hover:text-foreground"
+                                      className="hover:bg-transparent focus-visible:bg-transparent data-[state=open]:bg-transparent"
                                       onClick={(e) => e.stopPropagation()}
                                     >
                                       <MoreVertical className="w-4 h-4" />
