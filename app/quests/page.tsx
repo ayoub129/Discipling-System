@@ -604,7 +604,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
       <div className="md:ml-64 flex flex-col">
         <Header />
         <main className="flex-1 overflow-auto">
-          <div className="p-4 md:p-6 pb-32 max-w-7xl mx-auto space-y-6">
+          <div className="p-4 md:p-6 pb-44 max-w-7xl mx-auto space-y-6">
             {/* Header */}
             <div className="flex items-start justify-between">
               <div>
@@ -881,18 +881,20 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
         </main>
       </div>
 
-      <div className="fixed right-4 bottom-24 z-40">
-        <Button
-          className="bg-primary hover:bg-primary/90 gap-2 shadow-lg"
-          onClick={() => setIsFormOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-          New Quest
-        </Button>
+      <div className="fixed left-0 right-0 md:left-64 bottom-20 z-40">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 flex justify-end">
+          <Button
+            className="bg-primary hover:bg-primary/90 gap-2 shadow-lg"
+            onClick={() => setIsFormOpen(true)}
+          >
+            <Plus className="w-4 h-4" />
+            New Quest
+          </Button>
+        </div>
       </div>
 
       {activeTotalPages > 1 && (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur">
+        <div className="fixed left-0 right-0 md:left-64 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur">
           <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center justify-between text-sm text-muted-foreground">
             <button
               type="button"
