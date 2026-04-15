@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { Card } from '@/components/ui/card';
@@ -79,6 +79,7 @@ const getStatusIcon = (status: string) => {
 
 export default function QuestsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [quests, setQuests] = useState<Quest[]>(initialQuests);
   const [categories, setCategories] = useState<any[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
@@ -127,6 +128,10 @@ export default function QuestsPage() {
     recurring: false,
     recurringPattern: 'daily',
   });
+
+  useEffect(() => {
+    setSearchTerm(searchParams.get('q') || '');
+  }, [searchParams]);
 
   // Parse timestamps without forcing UTC for timezone-less values.
   // If DB value has no timezone, we treat it as local time.

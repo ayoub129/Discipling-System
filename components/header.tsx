@@ -1,6 +1,8 @@
 'use client';
 
-import { Bell, Search, Flame, LogOut } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Search, Flame, LogOut } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -14,7 +16,15 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export function Header() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user } = useUser();
+  const [globalSearch, setGlobalSearch] = useState('');
+
+  useEffect(() => {
+    setGlobalSearch(searchParams.get('q') || '');
+  }, [searchParams]);
 
   const currentDate = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -44,16 +54,6 @@ export function Header() {
                 <p className="font-bold text-foreground glow-success">{user?.streakDays || 0} {user?.streakDays === 1 ? 'Day' : 'Days'}</p>
               </div>
             </div>
-
-            {/* Notification */}
-            <Button
-              size="icon"
-              variant="ghost"
-              className="relative hover:bg-card"
-            >
-              <Bell size={20} className="text-foreground" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-accent rounded-full" />
-            </Button>
 
             {/* User Menu */}
             <DropdownMenu>
@@ -96,6 +96,28 @@ export function Header() {
             <Input
               placeholder="Search quests, tasks..."
               className="pl-10 bg-card border-border/50 focus:border-primary text-foreground placeholder:text-muted-foreground"
+              value={globalSearch}
+              onChange={(e) => {
+                const value = e.target.value;
+                setGlobalSearch(value);
+
+                if (pathname !== '/quests') return;
+
+                const params = new URLSearchParams(searchParams.toString());
+                if (value.trim()) {
+                  params.set('q', value);
+                } else {
+                  params.delete('q');
+                }
+                router.replace(`/quests${params.toString() ? `?${params.toString()}` : ''}`);
+              }}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                const value = globalSearch.trim();
+                const params = new URLSearchParams();
+                if (value) params.set('q', value);
+                router.push(`/quests${params.toString() ? `?${params.toString()}` : ''}`);
+              }}
             />
           </div>
 
