@@ -97,6 +97,7 @@ export default function QuestsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCategorySubmitting, setIsCategorySubmitting] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [activeTab, setActiveTab] = useState('pending');
   const [currentPage, setCurrentPage] = useState(1);
   const [categoryFormData, setCategoryFormData] = useState({
     name: '',
@@ -148,12 +149,17 @@ export default function QuestsPage() {
   };
 
   const filteredQuests = quests.filter(q => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+    const categoryName = categories
+      .find(cat => String(cat.id) === String(q.category))
+      ?.name?.toLowerCase() || '';
     const matchesSearch =
-      q.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (q.category ?? '')
-        .toString()
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase());
+      normalizedSearch.length === 0 ||
+      q.title.toLowerCase().includes(normalizedSearch) ||
+      (q.description ?? '').toLowerCase().includes(normalizedSearch) ||
+      categoryName.includes(normalizedSearch) ||
+      (q.rank_code ?? '').toLowerCase().includes(normalizedSearch) ||
+      q.date.toLowerCase().includes(normalizedSearch);
     const matchesCategory =
       categoryFilter === 'all' || String(q.category) === categoryFilter;
     return matchesSearch && matchesCategory;
@@ -181,6 +187,15 @@ export default function QuestsPage() {
 
   const filterByStatus = (status: string) =>
     sortedQuests.filter(q => getEffectiveStatus(q) === status);
+
+  const activeStatus = activeTab === 'not-done' ? 'cancelled' : activeTab;
+  const activeTabQuests = filterByStatus(activeStatus);
+  const activeTotalPages = Math.max(1, Math.ceil(activeTabQuests.length / PAGE_SIZE));
+  const activePage = Math.min(currentPage, activeTotalPages);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter, activeTab]);
 
   // Fetch categories from database
   useEffect(() => {
@@ -589,7 +604,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
       <div className="md:ml-64 flex flex-col">
         <Header />
         <main className="flex-1 overflow-auto">
-          <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+          <div className="p-4 md:p-6 pb-32 max-w-7xl mx-auto space-y-6">
             {/* Header */}
             <div className="flex items-start justify-between">
               <div>
@@ -639,7 +654,11 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
             </div>
 
             {/* Status Tabs */}
-              <Tabs defaultValue="pending" className="w-full">
+              <Tabs
+                value={activeTab}
+                onValueChange={setActiveTab}
+                className="w-full"
+              >
               <TabsList className="grid w-full max-w-2xl grid-cols-5 bg-card/50 border border-border">
                 <TabsTrigger value="pending">Pending ({filterByStatus('pending').length})</TabsTrigger>
                 <TabsTrigger value="in-progress">Active ({filterByStatus('in-progress').length})</TabsTrigger>
@@ -651,8 +670,10 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
               {['pending', 'in-progress', 'completed', 'delayed', 'not-done'].map(tab => {
                 const allForTab = filterByStatus(tab === 'not-done' ? 'cancelled' : tab);
                 const totalForTab = allForTab.length;
-                const totalPages = Math.max(1, Math.ceil(totalForTab / PAGE_SIZE));
-                const effectivePage = Math.min(currentPage, totalPages);
+                const effectivePage = Math.min(
+                  currentPage,
+                  Math.max(1, Math.ceil(totalForTab / PAGE_SIZE)),
+                );
                 const startIndex = (effectivePage - 1) * PAGE_SIZE;
                 const pageItems = allForTab.slice(startIndex, startIndex + PAGE_SIZE);
 
@@ -850,37 +871,6 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                           </Card>
                         ))}
 
-                        {totalPages > 1 && (
-                          <div className="flex items-center justify-between pt-2 text-xs text-muted-foreground">
-                            <button
-                              type="button"
-                              disabled={effectivePage === 1}
-                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                              className={`px-3 py-1 rounded border ${
-                                effectivePage === 1
-                                  ? 'opacity-50 cursor-not-allowed border-border'
-                                  : 'border-border hover:border-primary'
-                              }`}
-                            >
-                              Previous
-                            </button>
-                            <span>
-                              Page {effectivePage} of {totalPages}
-                            </span>
-                            <button
-                              type="button"
-                              disabled={effectivePage === totalPages}
-                              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                              className={`px-3 py-1 rounded border ${
-                                effectivePage === totalPages
-                                  ? 'opacity-50 cursor-not-allowed border-border'
-                                  : 'border-border hover:border-primary'
-                              }`}
-                            >
-                              Next
-                            </button>
-                          </div>
-                        )}
                       </>
                     )}
                   </TabsContent>
@@ -890,6 +880,50 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           </div>
         </main>
       </div>
+
+      <div className="fixed right-4 bottom-24 z-40">
+        <Button
+          className="bg-primary hover:bg-primary/90 gap-2 shadow-lg"
+          onClick={() => setIsFormOpen(true)}
+        >
+          <Plus className="w-4 h-4" />
+          New Quest
+        </Button>
+      </div>
+
+      {activeTotalPages > 1 && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur">
+          <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center justify-between text-sm text-muted-foreground">
+            <button
+              type="button"
+              disabled={activePage === 1}
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              className={`px-3 py-1 rounded border ${
+                activePage === 1
+                  ? 'opacity-50 cursor-not-allowed border-border'
+                  : 'border-border hover:border-primary'
+              }`}
+            >
+              Previous
+            </button>
+            <span>
+              Page {activePage} of {activeTotalPages}
+            </span>
+            <button
+              type="button"
+              disabled={activePage === activeTotalPages}
+              onClick={() => setCurrentPage(p => Math.min(activeTotalPages, p + 1))}
+              className={`px-3 py-1 rounded border ${
+                activePage === activeTotalPages
+                  ? 'opacity-50 cursor-not-allowed border-border'
+                  : 'border-border hover:border-primary'
+              }`}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Quest Creation Form */}
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
