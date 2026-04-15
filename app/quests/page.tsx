@@ -10,8 +10,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { CheckCircle2, Clock, AlertCircle, Zap, Plus, Search, Edit2, Trash2, Play, MoreVertical } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { CheckCircle2, Clock, AlertCircle, Zap, Plus, Search, Edit2, Trash2, Play, MoreVertical, Copy } from 'lucide-react';
 
 interface Quest {
   id: string;
@@ -69,6 +70,8 @@ const getStatusIcon = (status: string) => {
       return <Clock className="w-4 h-4 text-muted-foreground" />;
     case 'delayed':
       return <AlertCircle className="w-4 h-4 text-destructive" />;
+    case 'cancelled':
+      return <AlertCircle className="w-4 h-4 text-destructive" />;
     default:
       return null;
   }
@@ -88,6 +91,8 @@ export default function QuestsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isCategoryFormOpen, setIsCategoryFormOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Quest | null>(null);
   const [editingQuestId, setEditingQuestId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCategorySubmitting, setIsCategorySubmitting] = useState(false);
@@ -121,10 +126,25 @@ export default function QuestsPage() {
     recurringPattern: 'daily',
   });
 
-  // Parse timestamps consistently (Supabase may return without timezone)
+  // Parse timestamps without forcing UTC for timezone-less values.
+  // If DB value has no timezone, we treat it as local time.
   const parseTs = (ts: string) => {
-    const hasTz = /[zZ]|[+-]\d{2}:\d{2}$/.test(ts);
-    return new Date(hasTz ? ts : `${ts}Z`);
+    return new Date(ts);
+  };
+
+  const getEffectiveStatus = (quest: Quest): Quest['status'] => {
+    if (
+      quest.status === 'completed' ||
+      quest.status === 'in-progress' ||
+      quest.status === 'cancelled' ||
+      quest.status === 'delayed'
+    ) {
+      return quest.status;
+    }
+    if (quest.planned_end && parseTs(quest.planned_end).getTime() < Date.now()) {
+      return 'delayed';
+    }
+    return 'pending';
   };
 
   const filteredQuests = quests.filter(q => {
@@ -160,7 +180,7 @@ export default function QuestsPage() {
   });
 
   const filterByStatus = (status: string) =>
-    sortedQuests.filter(q => (status === 'all' ? true : q.status === status));
+    sortedQuests.filter(q => getEffectiveStatus(q) === status);
 
   // Fetch categories from database
   useEffect(() => {
@@ -268,20 +288,10 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
     } catch (error) {
       console.error('[v0] Error updating quest status:', error);
       setQuests(prevQuests);
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'Failed to update quest status',
-      );
     }
   };
 
   const handleDelete = async (questId: string) => {
-    const confirmed = window.confirm(
-      'Are you sure you want to delete this quest?',
-    );
-    if (!confirmed) return;
-
     const prevQuests = quests;
     setQuests(current => current.filter(q => q.id !== questId));
 
@@ -299,9 +309,72 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
     } catch (error) {
       console.error('[v0] Error deleting quest:', error);
       setQuests(prevQuests);
-      alert(
-        error instanceof Error ? error.message : 'Failed to delete quest',
-      );
+    } finally {
+      setIsDeleteConfirmOpen(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const requestDeleteQuest = (quest: Quest) => {
+    setDeleteTarget(quest);
+    setIsDeleteConfirmOpen(true);
+  };
+
+  const handleDuplicateForNextDay = async (quest: Quest) => {
+    try {
+      const dateObj = new Date(`${quest.date}T00:00:00`);
+      dateObj.setDate(dateObj.getDate() + 1);
+      const nextDate = [
+        dateObj.getFullYear(),
+        String(dateObj.getMonth() + 1).padStart(2, '0'),
+        String(dateObj.getDate()).padStart(2, '0'),
+      ].join('-');
+
+      const toTimeInput = (iso: string | null, fallback: string) => {
+        if (!iso) return fallback;
+        const d = parseTs(iso);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      };
+
+      const response = await fetch('/api/quests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: quest.title,
+          description: quest.description ?? '',
+          category: quest.category ?? '',
+          rank: quest.rank_id ?? '',
+          date: nextDate,
+          startTime: toTimeInput(quest.planned_start, '09:00'),
+          endTime: toTimeInput(quest.planned_end, '10:00'),
+          xp: quest.xp_reward ?? 0,
+          points: quest.reward_points ?? 0,
+          penalty: quest.penalties_points ?? 0,
+          minusPoints: quest.max_minus_points ?? 0,
+          fixed: quest.is_fixed,
+          recurring: quest.is_recurring,
+          recurringPattern: quest.recurrence_rule?.includes('WEEKLY')
+            ? 'weekly'
+            : quest.recurrence_rule?.includes('MONTHLY')
+              ? 'monthly'
+              : quest.recurrence_rule?.includes('YEARLY')
+                ? 'yearly'
+                : 'daily',
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to duplicate quest');
+      }
+
+      const refreshResponse = await fetch('/api/quests');
+      if (refreshResponse.ok) {
+        const refreshData = await refreshResponse.json();
+        setQuests(refreshData.quests || []);
+      }
+    } catch (error) {
+      console.error('[v0] Error duplicating quest:', error);
     }
   };
 
@@ -316,7 +389,6 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
       console.log('[v0] Creating quest with data:', formData);
 
       if (!formData.title.trim() || !formData.date) {
-        alert('Please fill in title and date');
         return;
       }
 
@@ -368,8 +440,6 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
         recurringPattern: 'daily',
       });
 
-      alert('Quest created successfully!');
-
       // Refresh quests list
       const refreshResponse = await fetch('/api/quests');
       if (refreshResponse.ok) {
@@ -378,7 +448,6 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
       }
     } catch (error) {
       console.error('[v0] Error creating quest:', error);
-      alert(error instanceof Error ? error.message : 'Failed to create quest');
     } finally {
       setIsSubmitting(false);
     }
@@ -506,11 +575,6 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
     } catch (error) {
       console.error('[v0] Error saving quest edits:', error);
       setQuests(prevQuests);
-      alert(
-        error instanceof Error
-          ? error.message
-          : 'Failed to save quest changes',
-      );
     } finally {
       setIsSavingEdit(false);
     }
@@ -572,17 +636,17 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
             </div>
 
             {/* Status Tabs */}
-            <Tabs defaultValue="all" className="w-full">
+              <Tabs defaultValue="pending" className="w-full">
               <TabsList className="grid w-full max-w-2xl grid-cols-5 bg-card/50 border border-border">
-                <TabsTrigger value="all">All ({filteredQuests.length})</TabsTrigger>
                 <TabsTrigger value="pending">Pending ({filterByStatus('pending').length})</TabsTrigger>
                 <TabsTrigger value="in-progress">Active ({filterByStatus('in-progress').length})</TabsTrigger>
                 <TabsTrigger value="completed">Done ({filterByStatus('completed').length})</TabsTrigger>
                 <TabsTrigger value="delayed">Delayed ({filterByStatus('delayed').length})</TabsTrigger>
+                <TabsTrigger value="not-done">Not Done ({filterByStatus('cancelled').length})</TabsTrigger>
               </TabsList>
 
-              {['all', 'pending', 'in-progress', 'completed', 'delayed'].map(tab => {
-                const allForTab = filterByStatus(tab);
+              {['pending', 'in-progress', 'completed', 'delayed', 'not-done'].map(tab => {
+                const allForTab = filterByStatus(tab === 'not-done' ? 'cancelled' : tab);
                 const totalForTab = allForTab.length;
                 const totalPages = Math.max(1, Math.ceil(totalForTab / PAGE_SIZE));
                 const effectivePage = Math.min(currentPage, totalPages);
@@ -680,34 +744,30 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                             {/* Status and Actions */}
                             <div className="flex items-center gap-3 mt-4 lg:flex-col lg:items-end">
                               {(() => {
-                                const now = new Date();
-                                const isDelayed =
-                                  quest.planned_end &&
-                                  quest.status !== 'completed' &&
-                                  parseTs(quest.planned_end) < now;
+                                const effectiveStatus = getEffectiveStatus(quest);
                                 const baseBadge =
-                                  quest.status === 'completed'
+                                  effectiveStatus === 'completed'
                                     ? 'bg-accent/20 text-accent'
-                                    : quest.status === 'in-progress'
+                                    : effectiveStatus === 'in-progress'
                                       ? 'bg-primary/20 text-primary'
-                                      : 'bg-muted/20 text-muted-foreground';
+                                      : effectiveStatus === 'cancelled'
+                                        ? 'bg-destructive/20 text-destructive'
+                                        : 'bg-muted/20 text-muted-foreground';
                                 return (
                                   <div className="flex items-center gap-2">
-                                    {isDelayed ? (
+                                    {effectiveStatus === 'delayed' ? (
                                       <AlertCircle className="w-4 h-4 text-destructive" />
                                     ) : (
-                                      getStatusIcon(quest.status)
+                                      getStatusIcon(effectiveStatus)
                                     )}
                                     <Badge
                                       className={`text-xs capitalize ${
-                                        isDelayed
+                                        effectiveStatus === 'delayed'
                                           ? 'bg-destructive/20 text-destructive'
                                           : baseBadge
                                       }`}
                                     >
-                                      {isDelayed
-                                        ? 'delayed'
-                                        : quest.status.replace('-', ' ')}
+                                      {effectiveStatus.replace('-', ' ')}
                                     </Badge>
                                   </div>
                                 );
@@ -742,36 +802,44 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                                   </Button>
                                 )}
                                 {/* More Actions */}
-                                <Dialog>
-                                  <DialogTrigger asChild>
-                                    <Button size="sm" variant="ghost" onClick={(e) => e.stopPropagation()}>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="hover:bg-muted hover:text-foreground"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
                                       <MoreVertical className="w-4 h-4" />
                                     </Button>
-                                  </DialogTrigger>
-                                  <DialogContent className="bg-card/95 border-border" onClick={(e) => e.stopPropagation()}>
-                                    <DialogHeader>
-                                      <DialogTitle>Actions</DialogTitle>
-                                    </DialogHeader>
-                                    <div className="space-y-2">
-                                      <Button variant="outline" className="w-full justify-start" onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleEditQuest(quest);
-                                      }}>
-                                        <Edit2 className="w-4 h-4 mr-2" />
-                                        Edit Quest
-                                      </Button>
-                                      <Button variant="outline" className="w-full justify-start text-destructive hover:text-destructive"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleDelete(quest.id);
-                                        }}
-                                      >
-                                        <Trash2 className="w-4 h-4 mr-2" />
-                                        Delete Quest
-                                      </Button>
-                                    </div>
-                                  </DialogContent>
-                                </Dialog>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent
+                                    side="right"
+                                    align="start"
+                                    className="bg-card/95 border-border min-w-44"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <DropdownMenuItem onClick={() => handleEditQuest(quest)}>
+                                      <Edit2 className="w-4 h-4 mr-2" />
+                                      Edit
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      variant="destructive"
+                                      onClick={() => requestDeleteQuest(quest)}
+                                    >
+                                      <Trash2 className="w-4 h-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDuplicateForNextDay(quest)}>
+                                      <Copy className="w-4 h-4 mr-2" />
+                                      Duplicate
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleStatusChange(quest.id, 'cancelled')}>
+                                      <AlertCircle className="w-4 h-4 mr-2" />
+                                      Not Done
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             </div>
                           </div>
@@ -1199,7 +1267,6 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                   console.log('[v0] Category form data:', categoryFormData);
 
                   if (!categoryFormData.name.trim()) {
-                    alert('Please enter a category name');
                     return;
                   }
 
@@ -1229,10 +1296,8 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                   // Close form and reset
                   setIsCategoryFormOpen(false);
                   setCategoryFormData({ name: '', color: '#3b82f6', description: '' });
-                  alert('Category created successfully!');
                 } catch (error) {
                   console.error('[v0] Error creating category:', error);
-                  alert(error instanceof Error ? error.message : 'Failed to create category');
                 } finally {
                   setIsCategorySubmitting(false);
                 }
@@ -1241,6 +1306,44 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
             >
               {isCategorySubmitting ? 'Creating...' : 'Create Category'}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Modal */}
+      <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
+        <DialogContent className="max-w-md bg-card/95 border-border">
+          <DialogHeader>
+            <DialogTitle>Delete Quest</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Are you sure you want to delete
+              {deleteTarget ? ` "${deleteTarget.title}"` : ' this quest'}?
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteConfirmOpen(false);
+                  setDeleteTarget(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (deleteTarget) {
+                    handleDelete(deleteTarget.id);
+                  } else {
+                    setIsDeleteConfirmOpen(false);
+                  }
+                }}
+              >
+                Delete
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
