@@ -133,16 +133,16 @@ export default function QuestsPage() {
   };
 
   const getEffectiveStatus = (quest: Quest): Quest['status'] => {
-    if (
-      quest.status === 'completed' ||
-      quest.status === 'in-progress' ||
-      quest.status === 'cancelled' ||
-      quest.status === 'delayed'
-    ) {
+    // Final states never become delayed
+    if (quest.status === 'completed' || quest.status === 'cancelled') {
       return quest.status;
     }
+    // Any non-final quest (pending/in-progress/delayed) past planned_end is delayed
     if (quest.planned_end && parseTs(quest.planned_end).getTime() < Date.now()) {
       return 'delayed';
+    }
+    if (quest.status === 'in-progress') {
+      return 'in-progress';
     }
     return 'pending';
   };

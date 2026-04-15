@@ -238,7 +238,7 @@ export default function CalendarPage() {
 
                       const dateKey =
                         cellDate &&
-                        cellDate.toISOString().split('T')[0];
+                        toLocalDateKey(cellDate);
                       const dayQuests =
                         (dateKey && questsByDate[dateKey]) || [];
                       const completedCount = dayQuests.filter(
