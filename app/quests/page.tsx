@@ -117,6 +117,7 @@ export default function QuestsPage() {
     })(),
     startTime: '09:00',
     endTime: '10:00',
+    hasSpecificTime: true,
     rank: '',
     xp: 50,
     points: 25,
@@ -360,8 +361,12 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           category: quest.category ?? '',
           rank: quest.rank_id ?? '',
           date: nextDate,
-          startTime: toTimeInput(quest.planned_start, '09:00'),
-          endTime: toTimeInput(quest.planned_end, '10:00'),
+          startTime: quest.planned_start
+            ? toTimeInput(quest.planned_start, '09:00')
+            : null,
+          endTime: quest.planned_end
+            ? toTimeInput(quest.planned_end, '10:00')
+            : null,
           xp: quest.xp_reward ?? 0,
           points: quest.reward_points ?? 0,
           penalty: quest.penalties_points ?? 0,
@@ -417,8 +422,8 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           category: formData.category,
           rank: formData.rank,
           date: formData.date,
-          startTime: formData.startTime,
-          endTime: formData.endTime,
+          startTime: formData.hasSpecificTime ? formData.startTime : null,
+          endTime: formData.hasSpecificTime ? formData.endTime : null,
           xp: formData.xp,
           points: formData.points,
           penalty: formData.penalty,
@@ -447,6 +452,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
         date: new Date().toISOString().split('T')[0],
         startTime: '09:00',
         endTime: '10:00',
+        hasSpecificTime: true,
         rank: 'B',
         xp: 50,
         points: 25,
@@ -478,6 +484,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
       date: quest.date,
       startTime: quest.planned_start ? parseTs(quest.planned_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00',
       endTime: quest.planned_end ? parseTs(quest.planned_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '10:00',
+      hasSpecificTime: Boolean(quest.planned_start && quest.planned_end),
       penalty: quest.penalties_points,
       rank: quest.rank_id || '',
       xp: quest.xp_reward,
@@ -501,13 +508,13 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
     setIsSavingEdit(true);
 
     const plannedStart =
-      formData.date && formData.startTime
+      formData.hasSpecificTime && formData.date && formData.startTime
         ? new Date(
             `${formData.date}T${formData.startTime}:00`,
           ).toISOString()
         : null;
     const plannedEnd =
-      formData.date && formData.endTime
+      formData.hasSpecificTime && formData.date && formData.endTime
         ? new Date(`${formData.date}T${formData.endTime}:00`).toISOString()
         : null;
 
@@ -550,8 +557,8 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           description: formData.description,
           category: formData.category,
           date: formData.date,
-          startTime: formData.startTime,
-          endTime: formData.endTime,
+          startTime: formData.hasSpecificTime ? formData.startTime : null,
+          endTime: formData.hasSpecificTime ? formData.endTime : null,
           xp: formData.xp,
           points: formData.points,
           penalty: formData.penalty,
@@ -578,6 +585,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
         date: new Date().toISOString().split('T')[0],
         startTime: '09:00',
         endTime: '10:00',
+        hasSpecificTime: true,
         rank: 'B',
         xp: 50,
         points: 25,
@@ -1030,7 +1038,22 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
 
               {/* Quest Duration Section */}
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-secondary">Quest Duration</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-secondary">Quest Duration</label>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!formData.hasSpecificTime}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          hasSpecificTime: !e.target.checked,
+                        })
+                      }
+                    />
+                    No specific time (date only)
+                  </label>
+                </div>
                 <div className="grid grid-cols-3 gap-3 items-end">
                   <div>
                     <p className="text-xs text-muted-foreground mb-1.5">Start Time</p>
@@ -1038,6 +1061,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                       type="time"
                       value={formData.startTime}
                       onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                      disabled={!formData.hasSpecificTime}
                       className="bg-card/50 border-secondary/30 hover:border-secondary/50 focus:border-secondary/70 transition-all"
                     />
                   </div>
@@ -1050,6 +1074,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                       type="time"
                       value={formData.endTime}
                       onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                      disabled={!formData.hasSpecificTime}
                       className="bg-card/50 border-secondary/30 hover:border-secondary/50 focus:border-secondary/70 transition-all"
                     />
                   </div>
@@ -1492,7 +1517,22 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
 
               {/* Time Section */}
               <div className="space-y-2">
-                <label className="text-sm font-semibold text-secondary">Quest Duration</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-semibold text-secondary">Quest Duration</label>
+                  <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!formData.hasSpecificTime}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          hasSpecificTime: !e.target.checked,
+                        })
+                      }
+                    />
+                    No specific time (date only)
+                  </label>
+                </div>
                 <div className="grid grid-cols-3 gap-3 items-end">
                   <div>
                     <p className="text-xs text-muted-foreground mb-1.5">Start Time</p>
@@ -1500,6 +1540,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                       type="time"
                       value={formData.startTime}
                       onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                      disabled={!formData.hasSpecificTime}
                       className="bg-card/50 border-secondary/30 hover:border-secondary/50 focus:border-secondary/70 transition-all"
                     />
                   </div>
@@ -1512,6 +1553,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                       type="time"
                       value={formData.endTime}
                       onChange={(e) => setFormData({ ...formData, endTime: e.target.value })}
+                      disabled={!formData.hasSpecificTime}
                       className="bg-card/50 border-secondary/30 hover:border-secondary/50 focus:border-secondary/70 transition-all"
                     />
                   </div>

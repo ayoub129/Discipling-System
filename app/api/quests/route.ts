@@ -73,13 +73,21 @@ export async function POST(request: Request) {
     // so server timezone never shifts quest times.
     const offsetMinutes =
       typeof timezoneOffsetMinutes === 'number' ? timezoneOffsetMinutes : 0;
-    const plannedStart = toUtcIsoFromLocal(date, startTime, offsetMinutes);
-    const plannedEnd = toUtcIsoFromLocal(date, endTime, offsetMinutes);
+    const hasSpecificTime = Boolean(startTime && endTime);
+    const plannedStart = hasSpecificTime
+      ? toUtcIsoFromLocal(date, startTime, offsetMinutes)
+      : null;
+    const plannedEnd = hasSpecificTime
+      ? toUtcIsoFromLocal(date, endTime, offsetMinutes)
+      : null;
 
-    const estimatedMinutes = Math.round(
-      (new Date(plannedEnd).getTime() - new Date(plannedStart).getTime()) /
-        (1000 * 60),
-    );
+    const estimatedMinutes =
+      plannedStart && plannedEnd
+        ? Math.round(
+            (new Date(plannedEnd).getTime() - new Date(plannedStart).getTime()) /
+              (1000 * 60),
+          )
+        : null;
 
     // Insert quest
     const { data: quest, error } = await supabase
@@ -234,8 +242,8 @@ export async function PATCH(request: Request) {
       category?: string | null;
       rank?: string | null;
       date?: string;
-      startTime?: string;
-      endTime?: string;
+      startTime?: string | null;
+      endTime?: string | null;
       xp?: number;
       points?: number;
       penalty?: number;
@@ -310,6 +318,10 @@ export async function PATCH(request: Request) {
         (new Date(plannedEnd).getTime() - new Date(plannedStart).getTime()) /
           (1000 * 60),
       );
+    } else if (date && (startTime === null || endTime === null)) {
+      updates.planned_start = null;
+      updates.planned_end = null;
+      updates.estimated_minutes = null;
     }
     if (rank !== undefined) {
       updates.rank_id = rank || null;
