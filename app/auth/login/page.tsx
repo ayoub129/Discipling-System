@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 
@@ -15,7 +15,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  const params = useSearchParams();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,18 +35,7 @@ export default function LoginPage() {
         throw error;
       }
       
-      console.log('[v0] Login successful, user:', data.user?.email);
-      
-      // Wait for the session to be fully established
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Verify session exists
-      const { data: sessionData } = await supabase.auth.getSession();
-      console.log('[v0] Session established:', !!sessionData.session);
-      
-      // Redirect to system panel
-      console.log('[v0] Redirecting to system-panel...');
-      router.push('/system-panel');
+      window.location.assign('/system-panel');
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : 'An error occurred';
       console.log('[v0] Error:', errorMsg);
@@ -110,6 +99,8 @@ export default function LoginPage() {
               </Button>
             </form>
 
+<Link href="/auth/forgot-password" className="block text-sm text-primary">Forgot your password?</Link>
+            {params.get('error') === 'link-expired' && <p role="alert" className="text-destructive">This email link is invalid or expired. Request a new link.</p>}
             {/* Divider */}
             <div className="relative">
               <div className="absolute inset-0 flex items-center">

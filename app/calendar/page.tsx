@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useUser } from '@/components/user-context';
+import { dateKey as accountDateKey } from '@/lib/time';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { Card } from '@/components/ui/card';
@@ -22,6 +24,8 @@ interface Quest {
 }
 
 export default function CalendarPage() {
+  const { user } = useUser();
+  const timezone = user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [currentDate, setCurrentDate] = useState(() => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
@@ -30,6 +34,11 @@ export default function CalendarPage() {
   const [quests, setQuests] = useState<Quest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [streakDays, setStreakDays] = useState<number | null>(null);
+
+  useEffect(() => {
+    const day = new Date(accountDateKey(new Date(), timezone) + 'T12:00:00');
+    setSelectedDate(day); setCurrentDate(new Date(day.getFullYear(), day.getMonth(), 1));
+  }, [timezone]);
 
   // Use local date keys (YYYY-MM-DD) to avoid UTC/DST day shifts
   const toLocalDateKey = (d: Date) => {
@@ -73,7 +82,7 @@ export default function CalendarPage() {
     setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1));
   };
 
-  const today = new Date();
+  const today = new Date(accountDateKey(new Date(), timezone) + 'T12:00:00');
   const isCurrentMonth =
     today.getFullYear() === currentDate.getFullYear() && today.getMonth() === currentDate.getMonth();
 
@@ -192,10 +201,10 @@ export default function CalendarPage() {
                 <p className="text-muted-foreground">{monthName}</p>
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" size="icon" onClick={prevMonth}>
+                <Button variant="outline" size="icon" aria-label="Previous month" onClick={prevMonth}>
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
-                <Button variant="outline" size="icon" onClick={nextMonth}>
+                <Button variant="outline" size="icon" aria-label="Next month" onClick={nextMonth}>
                   <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -249,11 +258,16 @@ export default function CalendarPage() {
                       return (
                         <div
                           key={idx}
+                          role={isPlaceholder ? undefined : "button"}
+                          tabIndex={isPlaceholder ? -1 : 0}
+                          aria-label={cellDate ? `${cellDate.toLocaleDateString()}: ${taskCount} quests` : undefined}
+                          aria-pressed={isSelected}
+                          onKeyDown={e => { if (cellDate && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setSelectedDate(cellDate); } }}
                           onClick={() => {
                             if (!cellDate) return;
                             setSelectedDate(cellDate);
                           }}
-                          className={`min-h-32 p-2 rounded-lg border transition-all cursor-pointer ${
+                          className={`min-h-20 md:min-h-32 p-1 md:p-2 rounded-lg border transition-all cursor-pointer ${
                             isPlaceholder
                               ? 'bg-transparent border-transparent cursor-default'
                               : isSelected
@@ -281,7 +295,7 @@ export default function CalendarPage() {
                                   {dayQuests.slice(0, 2).map(task => (
                                     <div
                                       key={task.id}
-                                      className="text-xs p-1 rounded bg-primary/10 border border-primary/30 text-primary truncate"
+                                      className="hidden sm:block text-xs p-1 rounded bg-primary/10 border border-primary/30 text-primary truncate"
                                     >
                                       {task.title}
                                     </div>
@@ -417,7 +431,7 @@ export default function CalendarPage() {
                             {item.planned_start
                               ? new Date(item.planned_start).toLocaleTimeString(
                                   [],
-                                  { hour: '2-digit', minute: '2-digit' },
+                                  { timeZone: timezone, hour: '2-digit', minute: '2-digit' },
                                 )
                               : '--:--'}
                           </span>
@@ -440,7 +454,7 @@ export default function CalendarPage() {
                                 {item.planned_start && item.planned_end
                                   ? `${new Date(
                                       item.planned_start,
-                                    ).toLocaleTimeString([], {
+                                    ).toLocaleTimeString([], { timeZone: timezone,
                                       hour: '2-digit',
                                       minute: '2-digit',
                                     })} - ${new Date(

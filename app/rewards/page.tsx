@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { notifyUpdated, celebrate } from '@/lib/feedback';
+import { toast } from 'sonner';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { Card } from '@/components/ui/card';
@@ -28,7 +30,7 @@ interface Reward {
 
 interface RedeemedReward {
   id: string;
-  rewardId: number;
+  rewardId: string;
   name: string;
   cost: number;
   redeemedAt: Date;
@@ -61,10 +63,14 @@ const getCategoryColor = (category: string) => {
 };
 
 export default function RewardsPage() {
+  const redemptionRequest = useRef<Record<string, string>>({});
+  const [redeeming, setRedeeming] = useState<string | null>(null);
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [redeemedRewards, setRedeemedRewards] = useState<RedeemedReward[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [reload, setReload] = useState(0);
   const [userState, setUserState] = useState<UserState | null>(null);
   const [ranks, setRanks] = useState<RankDefinition[]>([]);
   const [formData, setFormData] = useState({
@@ -74,7 +80,7 @@ export default function RewardsPage() {
     description: '',
     minLevel: 1,
     minRankId: null as string | null,
-    minDisciplineScore: 20,
+    minDisciplineScore: 0,
     cooldownHours: 0,
     maxRedemptionsPerWeek: 0,
   });
@@ -83,11 +89,13 @@ export default function RewardsPage() {
     const loadData = async () => {
       try {
         setIsLoading(true);
+        setLoadError('');
 
-        const [profileRes, ranksRes, rewardsRes] = await Promise.all([
+        const [profileRes, ranksRes, rewardsRes, historyRes] = await Promise.all([
           fetch('/api/user-profile'),
           fetch('/api/ranks'),
           fetch('/api/rewards'),
+          fetch('/api/rewards/history'),
         ]);
 
         if (profileRes.ok) {
@@ -113,6 +121,9 @@ export default function RewardsPage() {
           );
         }
 
+        if (!profileRes.ok || !ranksRes.ok || !rewardsRes.ok || !historyRes.ok) throw new Error('Could not load your rewards. Please refresh to retry.');
+        const history = await historyRes.json();
+        setRedeemedRewards((history.redemptions || []).map((r: any) => ({ id: r.id, rewardId: r.reward_id, name: r.reward_name, cost: r.point_cost, redeemedAt: new Date(r.redeemed_at) })));
         if (rewardsRes.ok) {
           const { rewards: rewardsData } = await rewardsRes.json();
           setRewards(
@@ -132,18 +143,19 @@ export default function RewardsPage() {
           );
         }
       } catch (error) {
-        console.error('[v0] Error loading rewards data:', error);
+        setLoadError(error instanceof Error ? error.message : 'Could not load rewards');
       } finally {
         setIsLoading(false);
       }
     };
 
     loadData();
-  }, []);
+  }, [reload]);
 
   // Helper functions
   const compareRanksById = (userRankId: string | null, minRankId: string | null): boolean => {
-    if (!userRankId || !minRankId) return false;
+    if (!minRankId) return true;
+    if (!userRankId) return false;
     if (!ranks.length) return false;
 
     const orderedIds = ranks.map(r => r.id);
@@ -184,7 +196,7 @@ export default function RewardsPage() {
       const requiredRank =
         ranks.find(r => r.id === reward.minRankId)?.code || reward.minRankCode || 'Rank';
       const userRank = userState.rankCode || userState.rankName;
-      errors.push(`${requiredRank}-Rank required (you have ${userRank})`);
+      errors.push(`${requiredRank} required (you have ${userRank})`);
     }
     if (userState.disciplineScore < reward.minDisciplineScore) {
       errors.push(
@@ -214,7 +226,7 @@ export default function RewardsPage() {
           minimumRankId: formData.minRankId || null,
           minimumDisciplineScore: formData.minDisciplineScore,
           cooldownHours: formData.cooldownHours,
-          maxRedemptionsPerWeek: formData.maxRedemptionsPerWeek,
+          maxRedemptionsPerWeek: formData.maxRedemptionsPerWeek || null,
         }),
       });
 
@@ -247,8 +259,8 @@ export default function RewardsPage() {
         category: 'Entertainment',
         description: '',
         minLevel: 1,
-        minRankId: ranks[0]?.id ?? null,
-        minDisciplineScore: 20,
+        minRankId: null,
+        minDisciplineScore: 0,
         cooldownHours: 0,
         maxRedemptionsPerWeek: 0,
       });
@@ -260,12 +272,13 @@ export default function RewardsPage() {
   };
 
   const handleRedeem = async (reward: Reward) => {
-    if (!canRedeem(reward)) return;
+    if (!canRedeem(reward) || redeeming) return;
+    setRedeeming(reward.id);
     try {
       const response = await fetch('/api/rewards/redeem', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rewardId: reward.id }),
+        body: JSON.stringify({ rewardId: reward.id, requestId: redemptionRequest.current[reward.id] ||= crypto.randomUUID() }),
       });
 
       if (!response.ok) {
@@ -274,10 +287,13 @@ export default function RewardsPage() {
       }
 
       const { redemption, newBalance } = await response.json();
+      delete redemptionRequest.current[reward.id];
+      notifyUpdated('Reward redeemed. Enjoy it!');
+      celebrate();
 
       const redeemedReward: RedeemedReward = {
         id: redemption.id,
-        rewardId: Number(reward.id),
+        rewardId: reward.id,
         name: reward.name,
         cost: reward.cost,
         redeemedAt: new Date(redemption.redeemed_at ?? Date.now()),
@@ -294,9 +310,11 @@ export default function RewardsPage() {
       );
     } catch (error) {
       console.error('[v0] Error redeeming reward:', error);
-      alert(error instanceof Error ? error.message : 'Failed to redeem reward');
-    }
+      toast.error(error instanceof Error ? error.message : 'Failed to redeem reward');
+    } finally { setRedeeming(null); }
   };
+
+  if (isLoading || loadError) return <div className="min-h-screen"><Sidebar /><div className="md:ml-64"><Header /><main className="p-8">{loadError ? <div role="alert">{loadError}<Button className="ml-4" onClick={() => setReload(v=>v+1)}>Retry</Button></div> : <p role="status">Loading your rewards…</p>}</main></div></div>;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -434,13 +452,14 @@ export default function RewardsPage() {
                         <div>
                           <label className="text-sm font-semibold text-foreground">Min Rank</label>
                           <Select 
-                            value={formData.minRankId || undefined}
-                            onValueChange={(value) => setFormData({ ...formData, minRankId: value })}
+                            value={formData.minRankId || "none"}
+                            onValueChange={(value) => setFormData({ ...formData, minRankId: value === 'none' ? null : value })}
                           >
                             <SelectTrigger className="mt-1 bg-card/50 border-border/30">
                               <SelectValue placeholder="Select rank" />
                             </SelectTrigger>
                             <SelectContent>
+                              <SelectItem value="none">No rank requirement</SelectItem>
                               {ranks.map(rank => (
                                 <SelectItem
                                   key={rank.id}
@@ -488,7 +507,7 @@ export default function RewardsPage() {
                       </div>
 
                       <div>
-                        <label className="text-sm font-semibold text-foreground">Max Redemptions / Week</label>
+                        <label className="text-sm font-semibold text-foreground">Max Redemptions / Week (0 = unlimited)</label>
                         <Input
                           type="number"
                           min="0"
@@ -647,7 +666,7 @@ export default function RewardsPage() {
 
                       {/* Redeem Button */}
                       <Button
-                        disabled={!canRedeemedNow}
+                        disabled={!canRedeemedNow || redeeming !== null}
                         onClick={() => handleRedeem(reward)}
                         className={
                           canRedeemedNow

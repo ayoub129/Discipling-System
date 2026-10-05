@@ -1,237 +1,27 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
-import { Sidebar } from '@/components/sidebar';
-import { Header } from '@/components/header';
-import { Card } from '@/components/ui/card';
-import { CheckCircle2, Gift, AlertCircle, TrendingUp, Filter } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-
-const allActivities = [
-  {
-    id: 1,
-    type: 'quest-completed',
-    title: 'Quest Completed',
-    description: 'Workout',
-    value: '+5 XP',
-    timestamp: '2 hours ago',
-    icon: CheckCircle2,
-    color: 'text-accent',
-  },
-  {
-    id: 2,
-    type: 'reward-redeemed',
-    title: 'Reward Redeemed',
-    description: 'Watch 1 Episode',
-    value: '-3 pts',
-    timestamp: '4 hours ago',
-    icon: Gift,
-    color: 'text-primary',
-  },
-  {
-    id: 3,
-    type: 'level-up',
-    title: 'Level Up',
-    description: 'Reached Level 7',
-    value: '+1 Level',
-    timestamp: '1 day ago',
-    icon: TrendingUp,
-    color: 'text-accent',
-  },
-  {
-    id: 4,
-    type: 'penalty-triggered',
-    title: 'Penalty Triggered',
-    description: 'Missed B-Rank Quest',
-    value: '+1 Penalty',
-    timestamp: '2 days ago',
-    icon: AlertCircle,
-    color: 'text-destructive',
-  },
-  {
-    id: 5,
-    type: 'quest-completed',
-    title: 'Quest Completed',
-    description: 'Deep Work Session',
-    value: '+25 XP',
-    timestamp: '3 days ago',
-    icon: CheckCircle2,
-    color: 'text-accent',
-  },
-  {
-    id: 6,
-    type: 'quest-completed',
-    title: 'Quest Completed',
-    description: 'Meditation',
-    value: '+5 XP',
-    timestamp: '5 days ago',
-    icon: CheckCircle2,
-    color: 'text-accent',
-  },
-  {
-    id: 7,
-    type: 'reward-redeemed',
-    title: 'Reward Redeemed',
-    description: 'Coffee Break',
-    value: '-2 pts',
-    timestamp: '1 week ago',
-    icon: Gift,
-    color: 'text-primary',
-  },
-  {
-    id: 8,
-    type: 'level-up',
-    title: 'Level Up',
-    description: 'Reached Level 6',
-    value: '+1 Level',
-    timestamp: '1 week ago',
-    icon: TrendingUp,
-    color: 'text-accent',
-  },
-];
-
+'use client'
+import { useEffect, useState } from 'react'
+import { Sidebar } from '@/components/sidebar'
+import { Header } from '@/components/header'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { CheckCircle2, Gift, TrendingUp, AlertCircle, Clock } from 'lucide-react'
+interface Activity { id: string; type: string; title: string; description: string; xp_delta: number; points_delta: number; penalty_delta: number; created_at: string }
 export default function ActivityPage() {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedFilter, setSelectedFilter] = useState('all');
-
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [filter, setFilter] = useState('all')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
   useEffect(() => {
-    const checkAuth = async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/auth/login');
-      }
-      setIsLoading(false);
-    };
-    checkAuth();
-  }, [router]);
-
-  const filters = [
-    { id: 'all', label: 'All Activities' },
-    { id: 'quest-completed', label: 'Quests Completed' },
-    { id: 'reward-redeemed', label: 'Rewards Redeemed' },
-    { id: 'level-up', label: 'Level Ups' },
-    { id: 'penalty-triggered', label: 'Penalties' },
-  ];
-
-  const filteredActivities =
-    selectedFilter === 'all'
-      ? allActivities
-      : allActivities.filter((activity) => activity.type === selectedFilter);
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 rounded-lg bg-gradient-to-r from-primary to-secondary animate-pulse mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-background text-foreground">
-      <Sidebar />
-
-      <div className="md:ml-64 flex flex-col">
-        <Header />
-
-        <main className="flex-1 overflow-auto">
-          <div className="p-4 md:p-6 max-w-4xl mx-auto">
-            <div className="mb-8">
-              <h1 className="text-3xl font-bold mb-2">Activity Log</h1>
-              <p className="text-muted-foreground">Track all your discipline system activities and achievements</p>
-            </div>
-
-            {/* Filters */}
-            <Card className="border-border bg-card/50 backdrop-blur card-glow p-4 mb-6">
-              <div className="flex items-center gap-2 mb-3">
-                <Filter size={18} className="text-primary" />
-                <span className="text-sm font-semibold text-foreground">Filter Activities</span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {filters.map((filter) => (
-                  <Button
-                    key={filter.id}
-                    onClick={() => setSelectedFilter(filter.id)}
-                    variant={selectedFilter === filter.id ? 'default' : 'outline'}
-                    size="sm"
-                    className={selectedFilter === filter.id ? 'bg-primary text-primary-foreground' : ''}
-                  >
-                    {filter.label}
-                  </Button>
-                ))}
-              </div>
-            </Card>
-
-            {/* Activities List */}
-            <Card className="border-border bg-card/50 backdrop-blur card-glow overflow-hidden">
-              <div className="divide-y divide-border/30">
-                {filteredActivities.length > 0 ? (
-                  filteredActivities.map((activity) => {
-                    const Icon = activity.icon;
-                    return (
-                      <div
-                        key={activity.id}
-                        className="p-4 hover:bg-secondary/5 transition-colors first:rounded-t-lg last:rounded-b-lg"
-                      >
-                        <div className="flex items-start gap-4">
-                          <div className={`p-3 rounded-lg bg-secondary/10 flex-shrink-0 ${activity.color}`}>
-                            <Icon size={20} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-4 mb-2">
-                              <div>
-                                <h3 className="font-semibold text-foreground text-lg">{activity.title}</h3>
-                                <p className="text-sm text-muted-foreground">{activity.description}</p>
-                              </div>
-                              <span className="text-lg font-bold text-primary whitespace-nowrap flex-shrink-0">
-                                {activity.value}
-                              </span>
-                            </div>
-                            <p className="text-xs text-muted-foreground/60">{activity.timestamp}</p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="p-8 text-center">
-                    <p className="text-muted-foreground">No activities found</p>
-                  </div>
-                )}
-              </div>
-            </Card>
-
-            {/* Stats Summary */}
-            <div className="grid grid-cols-3 gap-4 mt-6">
-              <Card className="border-border bg-card/50 backdrop-blur card-glow p-4">
-                <p className="text-xs text-muted-foreground font-medium mb-2">Total Activities</p>
-                <p className="text-2xl font-bold text-foreground">{allActivities.length}</p>
-              </Card>
-              <Card className="border-border bg-card/50 backdrop-blur card-glow p-4">
-                <p className="text-xs text-muted-foreground font-medium mb-2">Quests Completed</p>
-                <p className="text-2xl font-bold text-accent">
-                  {allActivities.filter((a) => a.type === 'quest-completed').length}
-                </p>
-              </Card>
-              <Card className="border-border bg-card/50 backdrop-blur card-glow p-4">
-                <p className="text-xs text-muted-foreground font-medium mb-2">Rewards Redeemed</p>
-                <p className="text-2xl font-bold text-primary">
-                  {allActivities.filter((a) => a.type === 'reward-redeemed').length}
-                </p>
-              </Card>
-            </div>
-          </div>
-        </main>
-      </div>
-    </div>
-  );
+    const controller = new AbortController()
+    setLoading(true); setError('')
+    fetch(`/api/activity?type=${filter}&page=${page}`, { signal: controller.signal }).then(async res => {
+      if (!res.ok) throw new Error('Could not load your activity. Please retry.')
+      const data = await res.json(); setActivities(data.activities || []); setTotal(data.total)
+    }).catch(e => { if (!controller.signal.aborted) setError(e.message) }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [filter, page, retry])
+  return <div className="min-h-screen"><Sidebar /><div className="md:ml-64"><Header /><main className="p-4 md:p-8 max-w-4xl mx-auto"><p className="text-primary text-sm font-medium mb-2">Your journey</p><h1 className="text-3xl font-bold mb-2">Activity</h1><p className="text-muted-foreground mb-8">Every completed quest and earned reward, recorded as it happened.</p><div className="flex gap-2 flex-wrap mb-6">{[['all','All activity'],['quest-completed','Quests'],['reward-redeemed','Rewards'],['level-up','Levels'],['penalty-triggered','Penalties']].map(([key,label]) => <Button key={key} variant={filter === key ? 'default' : 'outline'} onClick={() => { setFilter(key); setPage(1) }}>{label}</Button>)}</div><Card className="divide-y divide-border overflow-hidden">{loading ? <p role="status" className="p-8">Loading activity…</p> : error ? <div className="p-8"><p role="alert">{error}</p><Button onClick={() => setRetry(v => v+1)} className="mt-4">Retry</Button></div> : activities.length === 0 ? <div className="p-12 text-center"><Clock className="mx-auto text-primary mb-4" /><h2 className="font-semibold">Your story starts here</h2><p className="text-muted-foreground mt-2">Complete your first quest to see your progress.</p></div> : activities.map(a => { const Icon = a.type === 'quest-completed' ? CheckCircle2 : a.type === 'reward-redeemed' ? Gift : a.type === 'level-up' ? TrendingUp : AlertCircle; return <article key={a.id} className="p-5 flex gap-4"><div className="p-3 bg-primary/10 rounded-xl h-fit"><Icon size={20} className="text-primary" /></div><div className="flex-1"><h2 className="font-semibold">{a.title}</h2><p className="text-muted-foreground text-sm">{a.description}</p><time className="text-xs text-muted-foreground" dateTime={a.created_at}>{new Date(a.created_at).toLocaleString()}</time></div><div className="text-sm font-medium text-right">{a.xp_delta !== 0 && <p>{a.xp_delta > 0 ? '+' : ''}{a.xp_delta} XP</p>}{a.points_delta !== 0 && <p>{a.points_delta > 0 ? '+' : ''}{a.points_delta} points</p>}{a.penalty_delta !== 0 && <p>{a.penalty_delta > 0 ? '+' : ''}{a.penalty_delta} penalty points</p>}</div></article> })}</Card><div className="mt-6 flex justify-between items-center"><Button variant="outline" disabled={page===1 || loading} onClick={() => setPage(v=>v-1)}>Previous</Button><p className="text-sm text-muted-foreground">Page {page} of {Math.max(1,Math.ceil(total/30))}</p><Button variant="outline" disabled={page*30>=total || loading} onClick={() => setPage(v=>v+1)}>Next</Button></div></main></div></div>
 }

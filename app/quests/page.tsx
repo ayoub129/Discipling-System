@@ -1,6 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { notifyUpdated, celebrate } from '@/lib/feedback';
+import { toast } from 'sonner';
+import { useUser } from '@/components/user-context';
+import { dateKey } from '@/lib/time';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
@@ -78,6 +82,8 @@ const getStatusIcon = (status: string) => {
 };
 
 export default function QuestsPage() {
+  const { user } = useUser();
+  const timezone = user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const router = useRouter();
   const searchParams = useSearchParams();
   const [quests, setQuests] = useState<Quest[]>(initialQuests);
@@ -132,6 +138,10 @@ export default function QuestsPage() {
   useEffect(() => {
     setSearchTerm(searchParams.get('q') || '');
   }, [searchParams]);
+
+  useEffect(() => {
+    if (user?.timezone) setFormData(prev => prev.title ? prev : ({ ...prev, date: dateKey(new Date(), user.timezone!) }));
+  }, [user?.timezone]);
 
   // Parse timestamps without forcing UTC for timezone-less values.
   // If DB value has no timezone, we treat it as local time.
@@ -214,8 +224,8 @@ export default function QuestsPage() {
           console.log('[v0] Fetched categories:', data);
           setCategories(data.categories || []);
           // Set first category as default if available
-          if (data.categories && data.categories.length > 0 && !formData.category) {
-            setFormData(prev => ({ ...prev, category: data.categories[0].id }));
+          if (data.categories && data.categories.length > 0) {
+            setFormData(prev => prev.category ? prev : ({ ...prev, category: data.categories[0].id }));
           }
         }
       } catch (error) {
@@ -239,8 +249,8 @@ export default function QuestsPage() {
           console.log('[v0] Fetched ranks:', data);
           setRanks(data.ranks || []);
           // Set first rank as default if available
-if (data.ranks && data.ranks.length > 0 && !formData.rank) {
-          setFormData(prev => ({ ...prev, rank: data.ranks[0].id }));
+if (data.ranks && data.ranks.length > 0) {
+          setFormData(prev => prev.rank ? prev : ({ ...prev, rank: data.ranks[0].id }));
         }
         }
       } catch (error) {
@@ -306,7 +316,12 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || 'Failed to update quest');
       }
+      notifyUpdated(newStatus === 'completed' ? 'Quest complete. Well done!' : 'Quest updated');
+      if (newStatus === 'completed') celebrate();
+      const fresh = await fetch('/api/quests');
+      if (fresh.ok) setQuests((await fresh.json()).quests || []);
     } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update quest');
       console.error('[v0] Error updating quest status:', error);
       setQuests(prevQuests);
     }
@@ -354,7 +369,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
       const toTimeInput = (iso: string | null, fallback: string) => {
         if (!iso) return fallback;
         const d = parseTs(iso);
-        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        return d.toLocaleTimeString('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
       };
 
       const response = await fetch('/api/quests', {
@@ -378,7 +393,8 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           minusPoints: quest.max_minus_points ?? 0,
           fixed: quest.is_fixed,
           recurring: quest.is_recurring,
-          timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+          timezoneOffsetMinutes: new Date(`${nextDate}T12:00:00`).getTimezoneOffset(),
+          timezone,
           recurringPattern: quest.recurrence_rule?.includes('WEEKLY')
             ? 'weekly'
             : quest.recurrence_rule?.includes('MONTHLY')
@@ -435,7 +451,8 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           minusPoints: formData.minusPoints,
           fixed: formData.fixed,
           recurring: formData.recurring,
-          timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+          timezoneOffsetMinutes: new Date(`${formData.date}T12:00:00`).getTimezoneOffset(),
+          timezone,
           recurringPattern: formData.recurringPattern,
         }),
       });
@@ -454,7 +471,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
         title: '',
         description: '',
         category: '',
-        date: new Date().toISOString().split('T')[0],
+        date: dateKey(new Date(), timezone),
         startTime: '09:00',
         endTime: '10:00',
         hasSpecificTime: true,
@@ -487,14 +504,14 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
       description: quest.description || '',
       category: quest.category || '',
       date: quest.date,
-      startTime: quest.planned_start ? parseTs(quest.planned_start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '09:00',
-      endTime: quest.planned_end ? parseTs(quest.planned_end).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }) : '10:00',
+      startTime: quest.planned_start ? parseTs(quest.planned_start).toLocaleTimeString('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '09:00',
+      endTime: quest.planned_end ? parseTs(quest.planned_end).toLocaleTimeString('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : '10:00',
       hasSpecificTime: Boolean(quest.planned_start && quest.planned_end),
       penalty: quest.penalties_points,
       rank: quest.rank_id || '',
       xp: quest.xp_reward,
       points: quest.reward_points,
-      minusPoints: quest.current_minus_points || 0,
+      minusPoints: quest.max_minus_points || 0,
       fixed: quest.is_fixed,
       recurring: quest.is_recurring,
       recurringPattern: quest.recurrence_rule?.includes('DAILY') ? 'daily' : 
@@ -571,7 +588,8 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
           rank: formData.rank,
           fixed: formData.fixed,
           recurring: formData.recurring,
-          timezoneOffsetMinutes: new Date().getTimezoneOffset(),
+          timezoneOffsetMinutes: new Date(`${formData.date}T12:00:00`).getTimezoneOffset(),
+          timezone,
           recurringPattern: formData.recurringPattern,
         }),
       });
@@ -587,7 +605,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
         title: '',
         description: '',
         category: 'Productivity',
-        date: new Date().toISOString().split('T')[0],
+        date: dateKey(new Date(), timezone),
         startTime: '09:00',
         endTime: '10:00',
         hasSpecificTime: true,
@@ -753,8 +771,8 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                                 <div>
                                   <span className="text-muted-foreground block text-xs mb-1">Time</span>
                                   <p className="font-semibold">
-                                    {parseTs(quest.planned_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -
-                                    {parseTs(quest.planned_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {parseTs(quest.planned_start).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' })} -
+                                    {parseTs(quest.planned_end).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' })}
                                   </p>
                                 </div>
                               )}
@@ -856,7 +874,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                                     className="bg-card/95 border-border min-w-44"
                                     onClick={(e) => e.stopPropagation()}
                                   >
-                                    <DropdownMenuItem onClick={() => handleEditQuest(quest)}>
+                                    <DropdownMenuItem disabled={!['pending', 'delayed'].includes(quest.status)} onClick={() => handleEditQuest(quest)}>
                                       <Edit2 className="w-4 h-4 mr-2" />
                                       Edit
                                     </DropdownMenuItem>
@@ -1383,11 +1401,11 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
       <Dialog open={isDeleteConfirmOpen} onOpenChange={setIsDeleteConfirmOpen}>
         <DialogContent className="max-w-md bg-card/95 border-border">
           <DialogHeader>
-            <DialogTitle>Delete Quest</DialogTitle>
+            <DialogTitle>Archive Quest</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete
+              Archive
               {deleteTarget ? ` "${deleteTarget.title}"` : ' this quest'}?
             </p>
             <div className="flex justify-end gap-2">
@@ -1745,7 +1763,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
             <Button
               className="bg-gradient-to-r from-primary via-secondary to-primary hover:shadow-lg hover:shadow-primary/20 text-primary-foreground font-semibold transition-all"
               onClick={handleSaveEdit}
-              disabled={!formData.title.trim()}
+              disabled={!formData.title.trim() || isSavingEdit}
             >
               Save Changes
             </Button>
@@ -1788,7 +1806,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                     <p className="text-xs text-muted-foreground mb-1">Time</p>
                     <p className="font-semibold">
                       {selectedQuest.planned_start && selectedQuest.planned_end
-                        ? `${parseTs(selectedQuest.planned_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${parseTs(selectedQuest.planned_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                        ? `${parseTs(selectedQuest.planned_start).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' })} - ${parseTs(selectedQuest.planned_end).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' })}`
                         : '—'}
                     </p>
                   </div>
@@ -1806,7 +1824,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                   </div>
                   {(selectedQuest.current_minus_points ?? 0) > 0 && (
                     <div className="text-center">
-                      <p className="text-xs text-muted-foreground mb-1">Minus Points</p>
+                      <p className="text-xs text-muted-foreground mb-1">Late penalty cap (0 = unlimited)</p>
                       <p className="text-xl font-bold text-destructive">-{selectedQuest.current_minus_points}</p>
                     </div>
                   )}
@@ -1853,7 +1871,7 @@ if (data.ranks && data.ranks.length > 0 && !formData.rank) {
                   <div>
                     <p className="text-xs text-muted-foreground mb-1">Actual Timing</p>
                     <p className="font-semibold text-accent">
-                      {parseTs(selectedQuest.actual_start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {parseTs(selectedQuest.actual_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {parseTs(selectedQuest.actual_start).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' })} - {parseTs(selectedQuest.actual_end).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' })}
                     </p>
                   </div>
                 ) : selectedQuest.actualTiming ? (

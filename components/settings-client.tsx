@@ -12,6 +12,11 @@ import { AlertCircle, Bell, Lock, User, Palette, Database, Settings, Zap, Trophy
 import { useState, useRef, useEffect } from 'react';
 import { useTheme } from 'next-themes';
 import { useUser } from '@/components/user-context';
+import { notifyUpdated } from '@/lib/feedback';
+import { toast } from 'sonner';
+import { ExperienceSettings } from '@/components/experience-settings';
+import { AccountControls } from '@/components/account-controls';
+import Link from 'next/link';
 
 interface UserData {
   username: string;
@@ -30,6 +35,8 @@ interface UserSettings {
   notifications_enabled: boolean;
   allow_auto_shift: boolean;
   allow_fixed_quests_shift: boolean;
+  sounds_enabled: boolean;
+  effects_enabled: boolean;
 }
 
 interface Rank {
@@ -38,6 +45,7 @@ interface Rank {
   code: string;
   color: string;
   display_order: number;
+  is_active: boolean;
 }
 
 interface ProgressionRule {
@@ -48,8 +56,8 @@ interface ProgressionRule {
 }
 
 export function SettingsClient() {
-  const { theme, setTheme } = useTheme();
-  const { user: contextUser, loading: userLoading } = useUser();
+  const { setTheme } = useTheme();
+  const { user: contextUser, loading: userLoading, error: userError, refreshUser } = useUser();
   const [user, setUser] = useState<UserData | null>(null);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -60,7 +68,7 @@ export function SettingsClient() {
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [ranks, setRanks] = useState<Rank[]>([]);
-  const [ranksLoading, setRanksLoading] = useState(true);
+  const [, setRanksLoading] = useState(true);
   const [newRank, setNewRank] = useState({ name: '', color: '#8b5cf6' });
   const [progressionRules, setProgressionRules] = useState<ProgressionRule[]>([]);
   const [newProgression, setNewProgression] = useState({ fromRankId: '', toRankId: '', requiredLevel: 1 });
@@ -150,7 +158,7 @@ export function SettingsClient() {
     if (userSettings && userSettings.theme) {
       setTheme(userSettings.theme);
     }
-  }, [userSettings?.theme, setTheme]);
+  }, [userSettings, setTheme]);
 
   // Remove old useEffect that was fetching profile again - it's now done in useEffect above
 
@@ -170,13 +178,13 @@ export function SettingsClient() {
       if (!response.ok) throw new Error('Failed to update profile');
 
       setUser({
-        ...user,
+        ...(user || { username: '', fullName: '', email: '', avatar: '' }),
         username: editFormData.username,
         fullName: editFormData.fullName,
         avatar: editFormData.avatar,
       });
       setIsEditingProfile(false);
-      alert('Profile updated successfully');
+      notifyUpdated('Profile updated');
     } catch (error) {
       console.error('Error updating profile:', error);
       alert('Failed to update profile');
@@ -203,7 +211,8 @@ export function SettingsClient() {
 
       const { url } = await response.json();
       setEditFormData({ ...editFormData, avatar: url });
-      setUser({ ...user, avatar: url });
+      setUser(previous => previous ? { ...previous, avatar: url } : previous);
+      notifyUpdated();
     } catch (error) {
       console.error('Error uploading avatar:', error);
       alert('Failed to upload avatar');
@@ -222,6 +231,9 @@ export function SettingsClient() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           theme: userSettings.theme,
+          timezone: userSettings.timezone,
+          sounds_enabled: userSettings.sounds_enabled,
+          effects_enabled: userSettings.effects_enabled,
           day_start_time: userSettings.day_start_time,
           day_end_time: userSettings.day_end_time,
           notifications_enabled: userSettings.notifications_enabled,
@@ -231,10 +243,13 @@ export function SettingsClient() {
       });
 
       if (!response.ok) throw new Error('Failed to save settings');
-      alert('Settings saved successfully');
+      localStorage.setItem('discipline:sounds', String(userSettings.sounds_enabled));
+      localStorage.setItem('discipline:effects', String(userSettings.effects_enabled));
+      window.dispatchEvent(new Event('discipline:settings'));
+      notifyUpdated('Settings saved');
     } catch (error) {
       console.error('Error saving settings:', error);
-      alert('Failed to save settings');
+      toast.error('Failed to save settings');
     } finally {
       setIsSavingSettings(false);
     }
@@ -321,9 +336,12 @@ export function SettingsClient() {
     }
   };
 
+  if (userLoading) return <p role="status">Loading your settings…</p>;
+  if (!user || userError) return <div role="alert">{userError || 'Could not load your profile'}<Button onClick={() => refreshUser()}>Retry</Button></div>;
+
   return (
-    <Tabs defaultValue="profile" className="w-full">
-      <TabsList className="grid w-full grid-cols-6 gap-2 bg-transparent border-b border-border/50 mb-8 h-auto p-0">
+    <div className="space-y-6"><div className="flex flex-wrap gap-3"><Button asChild variant="outline"><Link href="/manage">Manage rewards, penalties and categories</Link></Button><Button asChild variant="outline"><Link href="/series">Manage recurring quests</Link></Button></div><ExperienceSettings onSaved={setUserSettings} /><AccountControls /><Tabs defaultValue="profile" className="w-full">
+      <TabsList className="grid w-full grid-cols-5 gap-2 bg-transparent border-b border-border/50 mb-8 h-auto p-0">
         <TabsTrigger value="profile" className="gap-2 flex items-center justify-center pb-3 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent">
           <User size={16} />
           <span className="hidden sm:inline">Profile</span>
@@ -552,7 +570,7 @@ export function SettingsClient() {
                   <div className="flex items-center justify-between p-3 bg-card/50 rounded-lg border border-border/20">
                     <div className="flex items-center gap-2">
                       <Bell size={16} className="text-primary" />
-                      <Label className="text-sm font-semibold">Enable Notifications</Label>
+                      <Label className="text-sm font-semibold">Reminders while the app is open</Label>
                     </div>
                     <Switch
                       checked={userSettings.notifications_enabled}
@@ -672,7 +690,7 @@ export function SettingsClient() {
                         style={{ backgroundColor: rank.color }}
                       />
                       <span className="font-semibold">{rank.name}</span>
-                      {rank.active && <Badge className="bg-accent/20 text-accent">Active</Badge>}
+                      {rank.is_active && <Badge className="bg-accent/20 text-accent">Active</Badge>}
                     </div>
                     <Button 
                       variant="ghost" 
@@ -759,23 +777,7 @@ export function SettingsClient() {
                   progressionRules.map(prog => {
                     const fromRank = ranks.find(r => r.id === prog.from_rank_id);
                     const toRank = ranks.find(r => r.id === prog.to_rank_id);
-  // Show loading state while fetching user data and settings
-  const isInitialLoading = userLoading || !user;
-  const isSettingsDataLoading = settingsLoading || ranksLoading;
-
-  if (isInitialLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-96 space-y-4">
-        <div className="w-12 h-12 border-4 border-border/30 border-t-primary rounded-full animate-spin" />
-        <div className="space-y-2 text-center">
-          <p className="text-lg font-semibold">Loading Settings</p>
-          <p className="text-sm text-muted-foreground">Fetching your profile and preferences...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
+                    return (
                       <div key={prog.id} className="flex items-center justify-between p-3 bg-card/50 rounded-lg border border-border/20">
                         <div className="flex items-center gap-3">
                           <span className="font-semibold text-sm">{fromRank?.name} → {toRank?.name}</span>
@@ -791,6 +793,6 @@ export function SettingsClient() {
             </div>
           </Card>
       </TabsContent>
-    </Tabs>
+    </Tabs></div>
   );
 }

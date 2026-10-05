@@ -1,4 +1,6 @@
 'use client';
+import { notifyUpdated } from '@/lib/feedback';
+import { toast } from 'sonner';
 
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -253,14 +255,15 @@ export default function PenaltiesPage() {
         throw new Error(data.error || 'Failed to activate penalty');
       }
 
+      notifyUpdated('Penalty activated');
       setPenalties(prev =>
         prev.map(p =>
-          p.id === penalty.id ? { ...p, baseStatus: 'in-progress' } : p,
+          p.id === penalty.id ? { ...p, baseStatus: 'in-progress', dueAt: data.dueAt } : p,
         ),
       );
     } catch (error) {
       console.error('[v0] Error activating penalty:', error);
-      alert(error instanceof Error ? error.message : 'Failed to activate penalty');
+      toast.error(error instanceof Error ? error.message : 'Failed to activate penalty');
     }
   };
 
@@ -290,6 +293,7 @@ export default function PenaltiesPage() {
         ),
       );
 
+      notifyUpdated('Penalty completed');
       if (typeof data.penaltyPoints === 'number') {
         setPenaltyPoints(data.penaltyPoints);
       }
@@ -298,7 +302,7 @@ export default function PenaltiesPage() {
       }
     } catch (error) {
       console.error('[v0] Error completing penalty:', error);
-      alert(error instanceof Error ? error.message : 'Failed to complete penalty');
+      toast.error(error instanceof Error ? error.message : 'Failed to complete penalty');
     }
   };
 

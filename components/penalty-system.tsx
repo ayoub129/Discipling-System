@@ -11,7 +11,7 @@ export interface ActivePenaltyItem {
   description?: string | null;
   status: string;
   due_at: string | null;
-  penalty_definitions?: { severity_order?: number }[];
+  penalty_definitions?: { severity_order?: number };
 }
 
 const getSeverityColor = (severity: string) => {
@@ -84,12 +84,12 @@ export function PenaltySystem({ activePenalties: propPenalties, onMarkDone, load
           </div>
           <p className="text-foreground font-semibold mb-1">No Active Penalties</p>
           <p className="text-muted-foreground text-sm mb-4">Keep your discipline high to maintain this status!</p>
-          <Link href="/penalties">
-            <Button variant="outline" size="sm" className="gap-2">
+          <Button asChild variant="outline" size="sm" className="gap-2">
+            <Link href="/penalties">
               View penalties page
               <ChevronRight size={16} />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </div>
       </section>
     );
@@ -99,17 +99,17 @@ export function PenaltySystem({ activePenalties: propPenalties, onMarkDone, load
     <section className="mb-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-foreground">Active Penalties</h2>
-        <Link href="/penalties">
-          <Button variant="outline" size="sm" className="gap-2">
+        <Button asChild variant="outline" size="sm" className="gap-2">
+          <Link href="/penalties">
             View All
             <ChevronRight size={16} />
-          </Button>
-        </Link>
+          </Link>
+        </Button>
       </div>
 
       <div className="space-y-4">
         {list.map((penalty) => {
-          const severity = (penalty.penalty_definitions?.[0]?.severity_order != null && penalty.penalty_definitions[0].severity_order > 1) ? 'warning' : 'critical';
+          const severity = (penalty.penalty_definitions?.severity_order != null && penalty.penalty_definitions.severity_order > 1) ? 'warning' : 'critical';
           return (
             <div key={penalty.id} className="bg-card border border-destructive/30 rounded-xl p-6 card-glow">
               <div className="space-y-4">

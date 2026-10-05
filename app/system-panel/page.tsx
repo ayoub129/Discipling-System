@@ -1,6 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { notifyUpdated, celebrate } from '@/lib/feedback';
+import { toast } from 'sonner';
+import { Onboarding } from '@/components/onboarding';
+import { dateKey } from '@/lib/time';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
@@ -47,11 +51,13 @@ interface PenaltyItem {
   description: string | null;
   status: string;
   due_at: string | null;
-  penalty_definitions?: { severity_order?: number }[];
+  penalty_definitions?: { severity_order?: number };
 }
 
 export default function SystemPanel() {
   const router = useRouter();
+  const [reload, setReload] = useState(0);
+  const [loadError, setLoadError] = useState('');
   const [authLoading, setAuthLoading] = useState(true);
   const [profile, setProfile] = useState<DashboardProfile | null>(null);
   const [todayQuests, setTodayQuests] = useState<QuestItem[]>([]);
@@ -84,6 +90,7 @@ export default function SystemPanel() {
     const load = async () => {
       try {
         setDataLoading(true);
+        setLoadError('');
         const [profileRes, questsRes, penaltiesRes, chartsRes, categoriesRes] = await Promise.all([
           fetch('/api/user-profile'),
           fetch('/api/quests'),
@@ -93,11 +100,12 @@ export default function SystemPanel() {
         ]);
 
         if (cancelled) return;
-        const today = toLocalDateKey(new Date());
+        if (![profileRes, questsRes, penaltiesRes, chartsRes, categoriesRes].every(r=>r.ok)) throw new Error('Could not load your dashboard. Please retry.');
+        const p = await profileRes.json();
+        const today = dateKey(new Date(), p.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone);
 
         let profileData: DashboardProfile | null = null;
         if (profileRes.ok) {
-          const p = await profileRes.json();
           profileData = {
             name: p.fullName || p.username || 'User',
             level: p.level ?? 1,
@@ -149,14 +157,14 @@ export default function SystemPanel() {
 
         if (profileData) setProfile(profileData);
       } catch (e) {
-        if (!cancelled) console.error('[system-panel] load error', e);
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Could not load dashboard');
       } finally {
         if (!cancelled) setDataLoading(false);
       }
     };
     load();
     return () => { cancelled = true; };
-  }, [authLoading]);
+  }, [authLoading, reload]);
 
   const handleQuestStatusChange = async (questId: string, newStatus: string) => {
     const prev = [...todayQuests];
@@ -169,8 +177,12 @@ export default function SystemPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: questId, status: newStatus }),
       });
-      if (!res.ok) setTodayQuests(prev);
-    } catch {
+      if (!res.ok) { const data=await res.json(); throw new Error(data.error || 'Could not update quest'); }
+      notifyUpdated(newStatus === 'completed' ? 'Quest complete. Well done!' : 'Quest started');
+      if (newStatus === 'completed') celebrate();
+      setReload(v=>v+1);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update quest');
       setTodayQuests(prev);
     }
   };
@@ -182,12 +194,15 @@ export default function SystemPanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: penaltyId, action: 'complete' }),
       });
+      if (!res.ok) { const data=await res.json(); throw new Error(data.error || 'Could not complete penalty'); }
       if (res.ok) {
+        notifyUpdated('Penalty completed');
+        setReload(v=>v+1);
         setActivePenalties((p) => p.filter((x) => x.id !== penaltyId));
         setProfile((prev) => prev ? { ...prev, activePenalties: Math.max(0, (prev.activePenalties ?? 0) - 1) } : null);
       }
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Could not complete penalty');
     }
   };
 
@@ -208,14 +223,16 @@ export default function SystemPanel() {
       <div className="md:ml-64 flex flex-col">
         <Header />
         <main className="flex-1 overflow-auto">
+          <Onboarding />
+          {loadError && <div role="alert" className="mx-6 mt-6 p-4 border border-destructive/40 rounded-xl">{loadError}<Button variant="outline" className="ml-4" onClick={() => setReload(v=>v+1)}>Retry</Button></div>}
           <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
             <div className="flex justify-end">
-              <Link href="/quests">
-                <Button className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2">
+                <Button asChild className="bg-primary hover:bg-primary/90 text-primary-foreground gap-2">
+                  <Link href="/quests">
                   <Plus className="w-4 h-4" />
                   Add Quest
+                  </Link>
                 </Button>
-              </Link>
             </div>
 
             <section>

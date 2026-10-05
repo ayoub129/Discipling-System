@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { databaseError } from '@/lib/api';
 
 export async function GET() {
   try {
@@ -13,6 +14,8 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const maintenance = await supabase.rpc('maintain_discipline_user');
+    if (maintenance.error) return databaseError(maintenance.error);
     // User stats
     const { data: userStats, error: statsError } = await supabase
       .from('user_stats')
@@ -92,7 +95,7 @@ export async function GET() {
       if (r.to_rank_id) rankIds.add(r.to_rank_id);
     });
     const rankIdList = Array.from(rankIds);
-    let rankNames: Record<string, string> = {};
+    const rankNames: Record<string, string> = {};
     if (rankIdList.length > 0) {
       const { data: rankDefs } = await supabase
         .from('rank_definitions')

@@ -27,8 +27,8 @@ export default function SignupPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
       return;
     }
 
@@ -41,7 +41,8 @@ export default function SignupPage() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/system-panel`,
+          data: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       
@@ -49,23 +50,8 @@ export default function SignupPage() {
         throw error;
       }
 
-      // Wait for session to be established
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Get fresh session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        // If no session yet, try manual sign in
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (signInError) throw signInError;
-      }
-
-      // Redirect after session is confirmed
-      router.push('/system-panel');
+      if (data.session) window.location.assign('/system-panel');
+      else router.push('/auth/signup-success');
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       setError(errorMessage);

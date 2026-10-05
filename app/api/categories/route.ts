@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { parseBody, apiError } from '@/lib/api';
+import { shortText, description as descriptionSchema } from '@/lib/validation';
 
 export async function GET() {
   try {
@@ -18,6 +21,7 @@ export async function GET() {
       .from('quest_categories')
       .select('id, name, color, description, order_index, created_at, updated_at')
       .eq('user_id', user.id)
+      .is('archived_at', null)
       .order('order_index', { ascending: true });
 
     if (error) {
@@ -40,21 +44,17 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    console.log('[v0] POST /api/categories called');
     const supabase = await createClient();
 
     const {
       data: { user },
     } = await supabase.auth.getUser();
 
-    console.log('[v0] User:', user?.id);
-
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    console.log('[v0] Request body:', body);
+    const body = await parseBody(request, z.object({ name: shortText, description: descriptionSchema, color: z.string().regex(/^#[\da-fA-F]{6}$/).optional() }));
     const { name, color, description } = body;
 
     if (!name || !name.trim()) {
@@ -79,8 +79,6 @@ export async function POST(request: Request) {
       .select()
       .single();
 
-    console.log('[v0] Insert result:', { category, error });
-
     if (error) {
       console.error('[v0] Database error:', error);
       
@@ -97,14 +95,8 @@ export async function POST(request: Request) {
         { status: 500 }
       );
     }
-
-    console.log('[v0] Category created successfully:', category);
     return NextResponse.json({ category }, { status: 201 });
   } catch (error) {
-    console.error('[v0] Error in categories API:', error);
-    return NextResponse.json(
-      { error: 'Internal server error: ' + (error instanceof Error ? error.message : String(error)) },
-      { status: 500 }
-    );
+    return apiError(error);
   }
 }

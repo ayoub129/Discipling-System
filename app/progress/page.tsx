@@ -38,6 +38,27 @@ interface LevelHistoryItem {
   date: string;
 }
 
+  const ChartBar = ({ data, max, color }: { data: TimeSeriesData[]; max: number; color: string }) => (
+    <div className="overflow-x-auto"><div className={`flex items-end gap-3 h-48 ${data.length > 12 ? 'min-w-[720px]' : ''}`}>
+      {data.map((item, idx) => {
+        const safeMax = max > 0 ? max : 1;
+        const ratio = Math.min(1, Math.abs(item.value) / safeMax);
+        // Map 0 -> 4px, max -> 180px for a very visible difference
+        const heightPx = item.value === 0 ? 4 : 4 + ratio * 176;
+        return (
+          <div key={idx} className="flex-1 flex flex-col items-center gap-2">
+            <div
+              className={`w-full ${item.value < 0 ? 'bg-destructive' : color} rounded-t-lg transition-all hover:opacity-80`}
+              style={{ height: `${heightPx}px` }}
+            />
+            <span className="text-xs text-muted-foreground">{item.date}</span>
+            <span className="text-xs font-semibold">{item.value}</span>
+          </div>
+        );
+      })}
+    </div></div>
+  );
+
 export default function ProgressPage() {
   const [dateFilter, setDateFilter] = useState<'today' | 'week'>('week');
   const [stats, setStats] = useState<ProgressStats | null>(null);
@@ -51,13 +72,15 @@ export default function ProgressPage() {
     penalties: TimeSeriesData[];
   } | null>(null);
   const [chartsLoading, setChartsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const res = await fetch('/api/progress');
-        if (!res.ok) return;
+        if (!res.ok) throw new Error('Unable to load your progress');
         const data = await res.json();
         if (!cancelled) {
           setStats({
@@ -74,13 +97,13 @@ export default function ProgressPage() {
           setLevelHistory(Array.isArray(data.levelHistory) ? data.levelHistory : []);
         }
       } catch (e) {
-        if (!cancelled) setStats(null);
+        if (!cancelled) { setStats(null); setLoadError('Unable to load your progress. Please try again.'); }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [retry]);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,7 +111,8 @@ export default function ProgressPage() {
     (async () => {
       try {
         const res = await fetch(`/api/progress/charts?range=${dateFilter}`);
-        if (!res.ok || cancelled) return;
+        if (!res.ok) throw new Error('Unable to load charts');
+        if (cancelled) return;
         const data = await res.json();
         if (!cancelled) {
           setChartData({
@@ -99,13 +123,13 @@ export default function ProgressPage() {
           });
         }
       } catch {
-        if (!cancelled) setChartData(null);
+        if (!cancelled) { setChartData(null); setLoadError('Unable to load your charts. Please try again.'); }
       } finally {
         if (!cancelled) setChartsLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [dateFilter]);
+  }, [dateFilter, retry]);
 
   const formatRankDate = (iso: string) => {
     try {
@@ -129,31 +153,12 @@ export default function ProgressPage() {
   const questsCompleted = chartData?.quests ?? [];
   const rewardPoints = chartData?.rewardPoints ?? [];
   const penaltiesData = chartData?.penalties ?? [];
-  const maxXp = Math.max(1, ...xpOverTime.map((d) => d.value));
+  const maxXp = Math.max(1, ...xpOverTime.map((d) => Math.abs(d.value)));
   const maxQuests = Math.max(1, ...questsCompleted.map((d) => d.value));
   const maxRewards = Math.max(1, ...rewardPoints.map((d) => d.value));
   const maxPenalties = Math.max(1, ...penaltiesData.map((d) => d.value));
 
-  const ChartBar = ({ data, max, color }: { data: TimeSeriesData[]; max: number; color: string }) => (
-    <div className="flex items-end gap-3 h-48">
-      {data.map((item, idx) => {
-        const safeMax = max > 0 ? max : 1;
-        const ratio = item.value / safeMax;
-        // Map 0 -> 4px, max -> 180px for a very visible difference
-        const heightPx = item.value === 0 ? 4 : 4 + ratio * 176;
-        return (
-          <div key={idx} className="flex-1 flex flex-col items-center gap-2">
-            <div
-              className={`w-full ${color} rounded-t-lg transition-all hover:opacity-80`}
-              style={{ height: `${heightPx}px` }}
-            />
-            <span className="text-xs text-muted-foreground">{item.date}</span>
-            <span className="text-xs font-semibold">{item.value}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -169,6 +174,7 @@ export default function ProgressPage() {
             </div>
 
             {/* Stats: 3 top + 3 bottom */}
+            {loadError && <div role="alert" className="mb-6 rounded-xl border border-destructive/30 p-4"><p>{loadError}</p><button className="mt-2 text-primary underline" onClick={() => { setLoadError(''); setLoading(true); setRetry(v => v + 1); }}>Try again</button></div>}
             {loading ? (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                 {[1, 2, 3, 4, 5, 6].map((i) => (

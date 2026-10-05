@@ -1,0 +1,25 @@
+{
+    "project":  "zgoxppthlktmikfihsiz",
+    "verifiedDate":  "2026-10-05",
+    "version":  "20261005-customer-readiness",
+    "quests":  12,
+    "redemptions":  30,
+    "privateBackupQuests":  12,
+    "privateBackupRedemptions":  30,
+    "currentLevel":  24,
+    "currentXP":  1237,
+    "totalXPEarned":  17635,
+    "rewardPoints":  195,
+    "penaltyPoints":  6,
+    "longestStreak":  8,
+    "publicTablesWithoutRLS":  [
+
+                               ],
+    "authenticatedDirectStatsUpdate":  false,
+    "authenticatedDirectQuestUpdate":  false,
+    "authenticatedBackupAccess":  false,
+    "privateAvatarBucket":  true,
+    "anonymousAccountDeletionAccess":  false,
+    "hourlyMaintenanceActive":  true,
+    "rolledBackAuthenticatedVerification":  "passed"
+}

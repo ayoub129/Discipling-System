@@ -19,16 +19,16 @@ interface HeroStatusProps {
 
 export function HeroStatus(props: HeroStatusProps) {
   const hasData = props.name != null || props.level != null;
-  const name = hasData ? (props.name ?? 'User') : 'Alex Hunter';
-  const level = hasData ? (props.level ?? 1) : 7;
-  const rank = hasData ? (props.rank ?? 'F-Rank') : 'B-Rank Grinder';
-  const currentXP = hasData ? (props.currentXP ?? 0) : 4250;
-  const xpToNext = hasData ? (props.xpToNextLevel ?? 100) : 5000;
-  const xpThisWeek = hasData ? (props.xpThisWeek ?? 0) : 485;
-  const points = hasData ? (props.availablePoints ?? 0) : 42;
-  const discipline = hasData ? (props.disciplineScore ?? 0) : 92;
+  const name = hasData ? (props.name ?? 'User') : 'User';
+  const level = hasData ? (props.level ?? 1) : 1;
+  const rank = hasData ? (props.rank ?? 'F-Rank') : 'F-Rank';
+  const currentXP = hasData ? (props.currentXP ?? 0) : 0;
+  const xpToNext = hasData ? (props.xpToNextLevel ?? 100) : 100;
+  const xpThisWeek = hasData ? (props.xpThisWeek ?? 0) : 0;
+  const points = hasData ? (props.availablePoints ?? 0) : 0;
+  const discipline = hasData ? (props.disciplineScore ?? 0) : 0;
   const penalties = hasData ? (props.activePenalties ?? 0) : 0;
-  const streak = hasData ? (props.streak ?? 0) : 12;
+  const streak = hasData ? (props.streak ?? 0) : 0;
   const loading = props.loading ?? false;
 
   const progressPct = xpToNext > 0 ? Math.min(100, Math.round((currentXP / xpToNext) * 100)) : 0;

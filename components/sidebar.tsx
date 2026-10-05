@@ -1,110 +1,12 @@
-'use client';
-
-import { useState } from 'react';
-import { 
-  LayoutDashboard, Calendar, Zap, Gift, AlertTriangle, TrendingUp, Settings, Menu, X
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useUser } from '@/components/user-context';
-import Link from 'next/link';
-
-const menuItems = [
-  { icon: LayoutDashboard, label: 'System Panel', href: '/' },
-  { icon: Calendar, label: 'Calendar', href: '/calendar' },
-  { icon: Zap, label: 'Quests', href: '/quests' },
-  { icon: Gift, label: 'Rewards Store', href: '/rewards' },
-  { icon: AlertTriangle, label: 'Penalty Quests', href: '/penalties' },
-  { icon: TrendingUp, label: 'Progress', href: '/progress' },
-  { icon: Settings, label: 'Settings', href: '/settings' },
-];
-
-export function Sidebar() {
-  const [isOpen, setIsOpen] = useState(false);
-  const { user } = useUser();
-
-  const getAvatarInitial = () => user?.username?.charAt(0).toUpperCase() || 'U';
-
-  return (
-    <>
-      {/* Mobile toggle */}
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-50 md:hidden p-2 rounded-lg bg-card border border-border hover:border-primary transition-colors"
-      >
-        {isOpen ? <X size={20} /> : <Menu size={20} />}
-      </button>
-
-      {/* Sidebar */}
-      <aside
-        className={`fixed left-0 top-0 h-screen w-64 bg-sidebar border-r border-sidebar-border transition-transform duration-300 z-40 ${
-          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        } flex flex-col`}
-      >
-        {/* Logo */}
-        <div className="p-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Zap size={18} className="text-primary-foreground" />
-            </div>
-            <h1 className="text-xl font-bold text-sidebar-foreground glow-accent">
-              Discipline
-            </h1>
-          </div>
-          <p className="text-xs text-sidebar-foreground/60 mt-1">System v1.0</p>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-4">
-          <ul className="space-y-2">
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <li key={item.href}>
-                  <Link href={item.href} className="cursor-pointer">
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start gap-3 text-sidebar-foreground hover:bg-sidebar-accent/10 hover:text-sidebar-primary rounded-lg cursor-pointer"
-                      onClick={() => setIsOpen(false)}
-                    >
-                      <Icon size={18} />
-                      <span>{item.label}</span>
-                    </Button>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        {/* User Profile */}
-        <div className="p-4 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-sidebar-accent/10 border border-sidebar-border">
-            {user?.avatar ? (
-              <img
-                src={user.avatar}
-                alt={user.username}
-                className="w-10 h-10 rounded-full flex-shrink-0 object-cover"
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
-                <span className="text-sm font-bold text-primary-foreground">{getAvatarInitial()}</span>
-              </div>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-sidebar-foreground truncate">{user?.username || 'User'}</p>
-              <p className="text-xs text-sidebar-foreground/60">Level {user?.level || 1} • {user?.rank || 'F-Rank'}</p>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Mobile overlay */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 md:hidden z-30"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
-    </>
-  );
+'use client'
+import { useState } from 'react'
+import { usePathname } from 'next/navigation'
+import { LayoutDashboard, Calendar, Zap, Gift, AlertTriangle, TrendingUp, Settings, Menu, X, History } from 'lucide-react'
+import { useUser } from '@/components/user-context'
+import Link from 'next/link'
+import { useIsMobile } from '@/hooks/use-mobile'
+const items=[{icon:LayoutDashboard,label:'Today',href:'/system-panel'},{icon:Zap,label:'Quests',href:'/quests'},{icon:Calendar,label:'Calendar',href:'/calendar'},{icon:Gift,label:'Rewards',href:'/rewards'},{icon:AlertTriangle,label:'Penalties',href:'/penalties'},{icon:TrendingUp,label:'Progress',href:'/progress'},{icon:History,label:'Activity',href:'/activity'},{icon:Settings,label:'Settings',href:'/settings'}]
+export function Sidebar(){
+ const isMobile=useIsMobile(); const [open,setOpen]=useState(false),{user}=useUser(),path=usePathname()
+ return <><button type="button" aria-label={open?'Close navigation':'Open navigation'} aria-expanded={open} aria-controls="main-navigation" onClick={()=>setOpen(v=>!v)} className="fixed top-5 left-4 z-50 md:hidden p-2.5 rounded-xl bg-card border border-border">{open?<X size={20}/>:<Menu size={20}/>}</button><aside inert={isMobile&&!open} aria-hidden={isMobile&&!open?true:undefined} id="main-navigation" className={`fixed inset-y-0 left-0 w-64 bg-sidebar/95 backdrop-blur-xl border-r border-sidebar-border z-40 flex flex-col transition-transform duration-300 ${open?'translate-x-0':'-translate-x-full md:translate-x-0'}`}><Link href="/system-panel" className="p-7 flex gap-3 items-center border-b border-sidebar-border"><div className="p-2.5 rounded-xl bg-primary/15 text-primary"><Zap size={22}/></div><div><span className="text-xl font-semibold tracking-tight">Discipline</span><p className="text-xs text-muted-foreground mt-0.5">Small steps. Real progress.</p></div></Link><nav aria-label="Main navigation" className="flex-1 p-4 overflow-y-auto"><p className="px-3 mt-3 mb-4 text-[10px] uppercase tracking-[0.18em] font-semibold text-muted-foreground">Your workspace</p><ul className="space-y-1.5">{items.map(item=>{const Icon=item.icon,active=path===item.href||item.href==='/settings'&&['/manage','/series'].includes(path);return <li key={item.href}><Link href={item.href} aria-current={active?'page':undefined} onClick={()=>setOpen(false)} className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors ${active?'bg-primary/12 text-primary border border-primary/20':'text-muted-foreground hover:bg-muted/20 hover:text-foreground border border-transparent'}`}><Icon size={18}/>{item.label}{active&&<span className="ml-auto w-1.5 h-1.5 rounded-full bg-primary"/>}</Link></li>})}</ul></nav><div className="p-4 border-t border-sidebar-border"><Link href="/settings" className="flex gap-3 items-center p-3 rounded-xl bg-card/60"><div className="w-10 h-10 rounded-full bg-primary/15 text-primary grid place-items-center font-semibold overflow-hidden">{user?.avatar?<img src={user.avatar} alt="" className="w-full h-full object-cover"/>:user?.username?.[0]?.toUpperCase()||'U'}</div><div className="min-w-0"><p className="font-medium text-sm truncate">{user?.username||'Your profile'}</p><p className="text-xs text-muted-foreground mt-1">Level {user?.level||1} · {user?.rank||'F-Rank'}</p></div></Link></div></aside>{open&&<button aria-label="Close navigation" className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 md:hidden" onClick={()=>setOpen(false)}/>}</>
 }

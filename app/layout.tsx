@@ -1,25 +1,19 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { UserProvider } from '@/components/user-context'
+import { Suspense } from 'react'
+import { Toaster } from '@/components/ui/sonner'
+import { Celebration } from '@/components/celebration'
+import { Reminders } from '@/components/reminders'
 import './globals.css'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Discipline System - Premium Productivity Dashboard',
+  title: 'Discipline — Your daily progress',
   description: 'A gamified productivity app where you schedule daily tasks, complete quests, earn XP and rewards, and maintain discipline. Track your progress like a real-life RPG.',
-  generator: 'v0.app',
   icons: {
     icon: '/icon.svg',
-  },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
   },
 }
 
@@ -33,7 +27,10 @@ export default function RootLayout({
       <body className="font-sans antialiased">
         <ThemeProvider>
           <UserProvider>
-            {children}
+            <Suspense fallback={<div className="p-8" role="status">Loading your workspace…</div>}>{children}</Suspense>
+            <Toaster richColors closeButton />
+            <Celebration />
+            <Reminders />
           </UserProvider>
         </ThemeProvider>
         <Analytics />

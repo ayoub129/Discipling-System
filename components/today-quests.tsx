@@ -1,4 +1,5 @@
 'use client';
+import { useUser } from '@/components/user-context';
 
 import Link from 'next/link';
 import { Clock, Play, CheckCircle2, Pause, AlertCircle } from 'lucide-react';
@@ -72,12 +73,13 @@ function getStatusConfig(status: string) {
   return configs[status] || configs.pending;
 }
 
-function formatTime(iso: string | null) {
+function formatTime(iso: string | null, timezone?: string) {
   if (!iso) return '--:--';
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' });
 }
 
 export function TodayQuests({ quests: propQuests, categoryMap, onStatusChange, loading }: TodayQuestsProps) {
+  const { user } = useUser();
   const useReal = Array.isArray(propQuests);
   const list = useReal
     ? propQuests.map((q) => ({
@@ -85,8 +87,8 @@ export function TodayQuests({ quests: propQuests, categoryMap, onStatusChange, l
         title: q.title,
         // category is stored as id; resolve to name. If not in map, show as-is (might be name from older data)
         category: q.category ? (categoryMap?.[q.category] ?? q.category) : '',
-        startTime: formatTime(q.planned_start),
-        endTime: formatTime(q.planned_end),
+        startTime: formatTime(q.planned_start, user?.timezone),
+        endTime: formatTime(q.planned_end, user?.timezone),
         rank: q.rank_code || 'C',
         status: q.status,
         reward: q.reward_points ?? 0,
@@ -97,7 +99,7 @@ export function TodayQuests({ quests: propQuests, categoryMap, onStatusChange, l
   return (
     <section className="mb-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-foreground">Today's Quests</h2>
+        <h2 className="text-xl font-bold text-foreground">Today’s Quests</h2>
         <span className="text-sm text-muted-foreground">
           {loading ? '…' : `${list.length} quests`}
         </span>
@@ -105,7 +107,7 @@ export function TodayQuests({ quests: propQuests, categoryMap, onStatusChange, l
 
       {loading && useReal ? (
         <div className="bg-card border border-border/50 rounded-xl p-8 text-center text-muted-foreground">
-          Loading today's quests…
+          Loading today’s quests…
         </div>
       ) : (
         <div className="grid gap-3">

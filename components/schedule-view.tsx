@@ -1,4 +1,5 @@
 'use client';
+import { useUser } from '@/components/user-context';
 
 import Link from 'next/link';
 import { Clock, CheckCircle, AlertCircle, Zap } from 'lucide-react';
@@ -44,9 +45,9 @@ const getStatusColor = (status: string) => {
   }
 };
 
-function formatTime(iso: string | null) {
+function formatTime(iso: string | null, timezone?: string) {
   if (!iso) return '--:--';
-  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString([], { timeZone: timezone, hour: '2-digit', minute: '2-digit' });
 }
 
 function formatDuration(start: string | null, end: string | null) {
@@ -64,6 +65,7 @@ interface ScheduleViewProps {
 }
 
 export function ScheduleView({ todayQuests, loading }: ScheduleViewProps) {
+  const { user } = useUser();
   const useReal = Array.isArray(todayQuests);
   const realItems: ScheduleQuestItem[] = useReal ? todayQuests : [];
   const hasShift = useReal
@@ -79,7 +81,7 @@ export function ScheduleView({ todayQuests, loading }: ScheduleViewProps) {
 
   return (
     <section className="mb-6">
-      <h2 className="text-xl font-bold text-foreground mb-4">Today's Schedule</h2>
+      <h2 className="text-xl font-bold text-foreground mb-4">Today’s Schedule</h2>
 
       <div className="bg-card border border-border/50 rounded-xl p-6 card-glow space-y-4">
         {loading && useReal ? (
@@ -116,7 +118,7 @@ export function ScheduleView({ todayQuests, loading }: ScheduleViewProps) {
                           {item.status === 'completed' && <CheckCircle size={16} className="fill-current" />}
                         </div>
                         <span className="text-xs font-mono font-semibold text-foreground">
-                          {formatTime(item.planned_start)}
+                          {formatTime(item.planned_start, user?.timezone)}
                         </span>
                       </div>
                       <div className="flex-1 flex items-start justify-between gap-4">

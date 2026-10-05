@@ -1,169 +1,32 @@
-import { createClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
-
-type Bucket = { label: string; xp: number; quests: number; rewardPoints: number; penalties: number };
-
-function getTodayBuckets(): Bucket[] {
-  const labels = ['09', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23'];
-  return labels.map((label) => ({
-    label,
-    xp: 0,
-    quests: 0,
-    rewardPoints: 0,
-    penalties: 0,
-  }));
-}
-
-function getWeekBuckets(): Bucket[] {
-  const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  return labels.map((label) => ({
-    label,
-    xp: 0,
-    quests: 0,
-    rewardPoints: 0,
-    penalties: 0,
-  }));
-}
-
-export async function GET(request: Request) {
-  try {
-    const supabase = await createClient();
-    const { searchParams } = new URL(request.url);
-    const range = searchParams.get('range') || 'week';
-    if (range !== 'today' && range !== 'week') {
-      return NextResponse.json({ error: 'Invalid range' }, { status: 400 });
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const now = new Date();
-    const buckets: Bucket[] = range === 'today' ? getTodayBuckets() : getWeekBuckets();
-
-    if (range === 'today') {
-      const y = now.getUTCFullYear();
-      const m = now.getUTCMonth();
-      const d = now.getUTCDate();
-      const todayStart = new Date(Date.UTC(y, m, d, 0, 0, 0, 0));
-      const tomorrowStart = new Date(Date.UTC(y, m, d + 1, 0, 0, 0, 0));
-
-      // Use quests table instead of quest_logs.
-      // For today: all quests with today's date and status='completed'
-      const { data: questsToday } = await supabase
-        .from('quests')
-        .select('date, planned_start, xp_reward, reward_points, status')
-        .eq('user_id', user.id)
-        .eq('date', todayStart.toISOString().split('T')[0])
-        .eq('status', 'completed');
-
-      const hourToIndex = (hour: number) => {
-        if (hour >= 9 && hour <= 23) return hour - 9;
-        return -1;
-      };
-
-      questsToday?.forEach(
-        (row: {
-          planned_start: string | null;
-          xp_reward: number | null;
-          reward_points: number | null;
-        }) => {
-          const t = row.planned_start ? new Date(row.planned_start) : null;
-          if (!t) return;
-          const hour = t.getUTCHours();
-          const idx = hourToIndex(hour);
-          if (idx >= 0) {
-            buckets[idx].xp += row.xp_reward ?? 0;
-            buckets[idx].rewardPoints += row.reward_points ?? 0;
-            buckets[idx].quests += 1;
-          }
-        },
-      );
-
-      const { data: penalties } = await supabase
-        .from('user_penalties')
-        .select('issued_at')
-        .eq('user_id', user.id)
-        .gte('issued_at', todayStart.toISOString())
-        .lt('issued_at', tomorrowStart.toISOString());
-
-      penalties?.forEach((row: { issued_at: string }) => {
-        const t = new Date(row.issued_at);
-        const hour = t.getUTCHours();
-        const idx = hourToIndex(hour);
-        if (idx >= 0) buckets[idx].penalties += 1;
-      });
-    } else {
-      // Week: Monday 00:00 UTC to next Monday 00:00 UTC
-      const day = now.getUTCDay();
-      const monOffset = day === 0 ? -6 : 1 - day;
-      const mon = new Date(now);
-      mon.setUTCDate(now.getUTCDate() + monOffset);
-      mon.setUTCHours(0, 0, 0, 0);
-      const nextMon = new Date(mon);
-      nextMon.setUTCDate(mon.getUTCDate() + 7);
-
-      // Week: aggregate from quests table by date for completed quests
-      const { data: questsWeek } = await supabase
-        .from('quests')
-        .select('date, xp_reward, reward_points, status')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .gte('date', mon.toISOString().split('T')[0])
-        .lt('date', nextMon.toISOString().split('T')[0]);
-
-      questsWeek?.forEach(
-        (row: {
-          date: string;
-          xp_reward: number | null;
-          reward_points: number | null;
-        }) => {
-          const t = new Date(row.date + 'T00:00:00Z');
-          const dayOfWeek = t.getUTCDay();
-          const idx = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Mon=0 .. Sun=6
-          if (idx >= 0 && idx < 7) {
-            buckets[idx].xp += row.xp_reward ?? 0;
-            buckets[idx].rewardPoints += row.reward_points ?? 0;
-            buckets[idx].quests += 1;
-          }
-        },
-      );
-
-      const { data: penalties } = await supabase
-        .from('user_penalties')
-        .select('issued_at')
-        .eq('user_id', user.id)
-        .gte('issued_at', mon.toISOString())
-        .lt('issued_at', nextMon.toISOString());
-
-      penalties?.forEach((row: { issued_at: string }) => {
-        const t = new Date(row.issued_at);
-        const dayOfWeek = t.getUTCDay();
-        const idx = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        if (idx >= 0 && idx < 7) buckets[idx].penalties += 1;
-      });
-    }
-
-    const xp = buckets.map((b) => ({ date: b.label, value: b.xp }));
-    const quests = buckets.map((b) => ({ date: b.label, value: b.quests }));
-    const rewardPoints = buckets.map((b) => ({ date: b.label, value: b.rewardPoints }));
-    const penalties = buckets.map((b) => ({ date: b.label, value: b.penalties }));
-
-    return NextResponse.json({
-      range,
-      xp,
-      quests,
-      rewardPoints,
-      penalties,
-    });
-  } catch (error) {
-    console.error('[progress/charts] Error:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
+import { createClient } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+import { apiError, databaseError } from '@/lib/api'
+import { dateKey, addDays, zonedTimeToIso } from '@/lib/time'
+export async function GET(request:Request){
+ try{
+  const supabase=await createClient();const {data:{user}}=await supabase.auth.getUser()
+  if(!user)return NextResponse.json({error:'Unauthorized'},{status:401})
+  const range=new URL(request.url).searchParams.get('range')||'week'
+  if(!['today','week'].includes(range))return NextResponse.json({error:'Invalid range'},{status:400})
+  const settings=await supabase.from('user_settings').select('timezone').eq('user_id',user.id).single()
+  if(settings.error)return databaseError(settings.error)
+  const timezone=settings.data.timezone||'UTC',today=dateKey(new Date(),timezone)
+  const day=new Date(today+'T12:00:00Z').getUTCDay()
+  const start=range==='today'?today:addDays(today,day===0?-6:1-day)
+  const end=addDays(start,range==='today'?1:7)
+  const {data,error}=await supabase.from('system_events').select('type,xp_delta,points_delta,penalty_delta,created_at').eq('user_id',user.id).gte('created_at',zonedTimeToIso(start,'00:00',timezone)).lt('created_at',zonedTimeToIso(end,'00:00',timezone))
+  if(error)return databaseError(error)
+  const labels=range==='today'?Array.from({length:24},(_,i)=>String(i).padStart(2,'0')):['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const buckets=labels.map(label=>({label,xp:0,quests:0,rewardPoints:0,penalties:0}))
+  for(const event of data||[]){
+   const at=new Date(event.created_at)
+   const idx=range==='today'?Number(new Intl.DateTimeFormat('en',{timeZone:timezone,hour:'2-digit',hourCycle:'h23'}).format(at)):Math.round((new Date(dateKey(at,timezone)+'T12:00:00Z').getTime()-new Date(start+'T12:00:00Z').getTime())/86400000)
+   if(!buckets[idx])continue
+   buckets[idx].xp+=Number(event.xp_delta)
+   if(event.type==='quest-completed')buckets[idx].quests++
+   buckets[idx].rewardPoints+=Math.max(0,Number(event.points_delta))
+   if(event.penalty_delta>0||event.type==='penalty-triggered')buckets[idx].penalties++
   }
+  return NextResponse.json({range,timezone,xp:buckets.map(b=>({date:b.label,value:b.xp})),quests:buckets.map(b=>({date:b.label,value:b.quests})),rewardPoints:buckets.map(b=>({date:b.label,value:b.rewardPoints})),penalties:buckets.map(b=>({date:b.label,value:b.penalties}))})
+ }catch(error){return apiError(error)}
 }

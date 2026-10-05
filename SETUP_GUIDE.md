@@ -1,97 +1,17 @@
-# Discipline System - Setup Guide
+﻿# Setup and release
 
-## Issue: "Email not confirmed" Error
+Use Node.js 22 or newer and npm. Copy `.env.example` to `.env.local` and configure the public Supabase URL and anonymous key. Never expose a service-role key with NEXT_PUBLIC_. Run npm ci, then npm run dev.
 
-Supabase requires email confirmation by default. Since you don't have a domain for email confirmations, follow these steps:
+Before deployment run npm run typecheck, npm run lint, npm test and npm run build. Deploy this updated application with its database upgrade; older APIs cannot directly update balances or quest status.
 
-### Step 1: Disable Email Confirmation in Supabase
+Project zgoxppthlktmikfihsiz was upgraded and verified on October 5, 2026. Do not rerun live-upgrade.sql on this project. See SUPABASE_GUIDE.md.
 
-1. Go to your Supabase dashboard: https://app.supabase.com
-2. Navigate to **Authentication → Providers → Email**
-3. Under "Confirm email", toggle OFF the email confirmation requirement
-4. Click **Save**
+## Customer launch requirements
 
-This allows users to sign up and login immediately without confirming their email.
+1. Deploy this source and set production environment variables.
+2. Configure Supabase Auth Site URL and allowed callback URLs for the production domain. Test signup confirmation and password reset using a real inbox. Keep email confirmation enabled for customers; configure production SMTP and review Auth rate limits.
+3. Test signup, signin, quest completion, redemption, avatar upload, export and deletion with disposable staging accounts. Test two users for isolation. Do not delete the existing owner account as a test.
+4. Add your support email, privacy policy and terms appropriate to the product. Review data retention, including private migration backups.
+5. Configure error monitoring, alerts and an independently restorable database backup. Verify hourly cron executions succeed, beyond checking that the job is scheduled.
 
-## Step 2: Create Database Tables
-
-The database schema has been prepared in `scripts/001_create_tables.sql`. This creates 17 tables needed for the Discipline System:
-
-### Tables Created:
-- `profiles` - User profile data
-- `user_settings` - User preferences
-- `rank_definitions` - Custom rank system
-- `user_stats` - User progression and stats
-- `quests` - Tasks/quests system
-- `rewards` - Reward definitions
-- `penalties` - Penalty system
-- `activity_logs` - Activity feed
-- And 9 more supporting tables...
-
-### To Run the Migration:
-
-**Option A: Via Supabase Dashboard (Recommended)**
-1. Go to https://app.supabase.com → Your Project
-2. Click **SQL Editor** in the left sidebar
-3. Click **+ New Query**
-4. Copy and paste the entire contents of `/scripts/001_create_tables.sql`
-5. Click **Run** (or Cmd/Ctrl + Enter)
-6. Wait for all tables to be created
-
-**Option B: Via Supabase CLI**
-```bash
-supabase db push
-```
-
-## Step 3: Test Authentication
-
-Once email confirmation is disabled:
-
-1. Go to your app and click **Sign up**
-2. Enter email and password
-3. You should be redirected to the dashboard immediately
-4. To login again, click **Sign in** and use your credentials
-
-## Troubleshooting
-
-### Still getting "Email not confirmed"?
-- Make sure you toggled OFF email confirmation in Authentication settings
-- Try signing up with a new email address
-- Clear your browser cache and cookies
-- Check Supabase logs for any errors
-
-### Database migration failed?
-- Make sure you're in the correct project in Supabase
-- Check for any SQL syntax errors
-- Ensure Row Level Security (RLS) is enabled on the tables
-- All RLS policies are already included in the migration
-
-### Can't see tables in database?
-- Refresh the Supabase dashboard
-- Navigate to **Database** → **Tables**
-- Scroll down to see all 17 tables with RLS policies
-
-## Database Schema Overview
-
-The system is designed with Row Level Security (RLS) to ensure:
-- Users can only see their own data
-- Users can only modify their own records
-- Rewards can be global or personal
-- All activity is tracked and secured
-
-### Key Relations:
-- `profiles.id` ← Foreign Key Reference in all user data tables
-- `rank_definitions` ← Referenced by user_stats for ranking
-- `quests` ← Core task management with penalty tracking
-- `rewards` ← Redemption system with point costs
-- `penalties` ← Discipline system with severity levels
-
-## Next Steps
-
-After completing setup:
-1. Test user signup/login flow
-2. Create a profile through the Settings page
-3. Start creating quests and managing your discipline system
-4. Unlock rewards by completing tasks and earning points
-
-For API integration with the database, refer to `/lib/supabase/client.ts` and `/lib/supabase/server.ts`
+Reminders work while the application is open. Background push notifications are not implemented. Rewards are personal habit incentives. Billing is not implemented.

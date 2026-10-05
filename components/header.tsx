@@ -27,6 +27,7 @@ export function Header() {
   }, [searchParams]);
 
   const currentDate = new Date().toLocaleDateString('en-US', {
+    timeZone: user?.timezone,
     weekday: 'long',
     year: 'numeric',
     month: 'long',
@@ -38,16 +39,16 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b border-border/50">
-      <div className="px-4 md:px-6 py-4">
+      <div className="pl-16 pr-4 md:px-8 py-5">
         <div className="flex items-center justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">System Panel</h1>
+            <p className="text-xl font-semibold tracking-tight text-foreground">{{'/system-panel':'Make today count','/quests':'Your quests','/calendar':'Plan your time','/rewards':'Earn something good','/penalties':'Get back on track','/progress':'See your growth','/activity':'Your journey','/settings':'Make it yours','/manage':'Your system','/series':'Your routines'}[pathname] || 'Discipline'}</p>
             <p className="text-sm text-muted-foreground">{currentDate}</p>
           </div>
 
           <div className="flex items-center gap-4">
             {/* Streak indicator */}
-            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card border border-border/50 hover:border-accent/50 transition-colors">
+            <div className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg bg-card border border-border/50 hover:border-accent/50 transition-colors">
               <Flame size={18} className="text-accent" />
               <div>
                 <p className="text-xs text-muted-foreground">Streak</p>
@@ -59,6 +60,7 @@ export function Header() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
+                  aria-label="Open account menu"
                   size="icon"
                   variant="ghost"
                   className="hover:bg-card"
@@ -125,7 +127,7 @@ export function Header() {
           <div className="flex-1 md:flex-none md:w-48">
             <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold text-foreground">Level {user?.level || 1}</label>
-              <span className="text-xs text-muted-foreground">{user?.currentXP || 0} / {user?.requiredXP || 5000} XP</span>
+              <span className="text-xs text-muted-foreground">{user?.currentXP || 0} / {user?.requiredXP || 100} XP</span>
             </div>
             <Progress value={xpPercentage} className="h-2 bg-card border border-border/50" />
           </div>
